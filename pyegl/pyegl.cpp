@@ -1,11 +1,12 @@
 #include <torch/extension.h>
 
 #include <vector>
+#include <cassert>
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include <string>
-
+//#include <type_traits>
 
 #include "OpenGL_Helper.h"
 #include "path.h"
@@ -41,11 +42,41 @@ static OpenGL::Mesh mesh;
 static GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc;
 static OpenGL::Transformations transformations;
 static std::vector<OpenGL::mat4> rigids;
+static unsigned int frame_count = 0;
 
 
 void pyegl_init(unsigned int width, unsigned int height)
 {
+  // init egl context
   eglContext.Init(width, height);
+
+  // init shader program
+  path so_path(so_path_lookup());
+  if(!shaderProgram.Init((so_path.parent_path() / "shaders/vertexShader.glsl").str(), (so_path.parent_path() / "shaders/geometryShader.glsl").str(), (so_path.parent_path() / "shaders/fragmentShader.glsl").str()))
+  {
+      std::cout << "ERROR: initializing shader program failed" << std::endl;
+      return;
+  }
+
+  // uniform location
+  std::cout << "uniform location" << std::endl;
+  shaderProgram.Use();
+  transformations.SetUniformLocations(shaderProgram.GetUniformLocation("projection"), shaderProgram.GetUniformLocation("modelview"), shaderProgram.GetUniformLocation("mesh_normalization") );
+
+  // attribute location
+  std::cout << "attribute location" << std::endl;
+  shaderProgram.Use();
+  position_loc = shaderProgram.GetAttribLocation("in_position");
+  if (position_loc < 0) return;
+  normal_loc = shaderProgram.GetAttribLocation("in_normal");
+  color_loc = shaderProgram.GetAttribLocation("in_color");
+  uv_loc = shaderProgram.GetAttribLocation("in_uv");
+  mask_loc = shaderProgram.GetAttribLocation("in_mask");
+  
+  // render target
+  std::cout << "create rendertarget" << std::endl;
+  renderTarget.Init(eglContext.GetWidth(), eglContext.GetHeight());
+
   internal_state = InternalState::INITIALIZED;
 }
 
@@ -104,22 +135,23 @@ void render(std::vector<float>& intrinsics)
   mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
 
   // write rendertarget to file
-  renderTarget.WriteToFile("results/fbo_color_rendering_" + std::to_string(0) + ".png", 0);
-  renderTarget.WriteToFile("results/fbo_position_rendering_" + std::to_string(0) + ".png", 1);
-  renderTarget.WriteToFile("results/fbo_normal_rendering_" + std::to_string(0) + ".png", 2);
-  renderTarget.WriteToFile("results/fbo_uv_rendering_" + std::to_string(0) + ".png", 3);
-  renderTarget.WriteToFile("results/fbo_bary_rendering_" + std::to_string(0) + ".png", 4);
-  renderTarget.WriteToFile("results/fbo_vids_rendering_" + std::to_string(0) + ".png", 5);
+  renderTarget.WriteToFile("results/fbo_color_rendering_" + std::to_string(frame_count) + ".png", 0);
+  renderTarget.WriteToFile("results/fbo_position_rendering_" + std::to_string(frame_count) + ".png", 1);
+  renderTarget.WriteToFile("results/fbo_normal_rendering_" + std::to_string(frame_count) + ".png", 2);
+  renderTarget.WriteToFile("results/fbo_uv_rendering_" + std::to_string(frame_count) + ".png", 3);
+  renderTarget.WriteToFile("results/fbo_bary_rendering_" + std::to_string(frame_count) + ".png", 4);
+  renderTarget.WriteToFile("results/fbo_vids_rendering_" + std::to_string(frame_count) + ".png", 5);
 
   // save screenshot
-  eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(0) + ".ppm");
+  eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(frame_count) + ".ppm");
+  frame_count++;
 
   // flush and swap buffers
   eglContext.SwapBuffer();
 }
 
 
-std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::Tensor vertices, unsigned int n_vertices, torch::Tensor faces, unsigned int n_faces)
+std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vector<float> pose, torch::Tensor vertices, unsigned int n_vertices, torch::Tensor faces, unsigned int n_faces)
 {
   std::cout << "pyegl_forward" << std::endl;
   if (internal_state != InternalState::INITIALIZED)
@@ -128,33 +160,17 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::T
     return {};
   }
 
-  // init shader program
-  path so_path(so_path_lookup());
-  if(!shaderProgram.Init((so_path.parent_path() / "shaders/vertexShader.glsl").str(), (so_path.parent_path() / "shaders/geometryShader.glsl").str(), (so_path.parent_path() / "shaders/fragmentShader.glsl").str()))
+  if (vertices.scalar_type() != torch::kFloat32)
   {
-      std::cout << "ERROR: initializing shader program failed" << std::endl;
-      return {};
+    std::cout << "ERROR: vertices has to be float32, but was: " << vertices.scalar_type() << std::endl;
+    return {};
   }
 
-  // uniform location
-  std::cout << "uniform location" << std::endl;
-  shaderProgram.Use();
-  transformations.SetUniformLocations(shaderProgram.GetUniformLocation("projection"), shaderProgram.GetUniformLocation("modelview"), shaderProgram.GetUniformLocation("mesh_normalization") );
-
-  // attribute location
-  std::cout << "attribute location" << std::endl;
-  shaderProgram.Use();
-  position_loc = shaderProgram.GetAttribLocation("in_position");
-  if (position_loc < 0) return {};
-  normal_loc = shaderProgram.GetAttribLocation("in_normal");
-  color_loc = shaderProgram.GetAttribLocation("in_color");
-  uv_loc = shaderProgram.GetAttribLocation("in_uv");
-  mask_loc = shaderProgram.GetAttribLocation("in_mask");
-
-  std::cout << "load mesh data" << std::endl;
-  //mesh.LoadObjFile("data/bunny_col.obj", 1.0f);
-
-  std::cout << "------------------------------" << std::endl;
+  if (faces.scalar_type() != torch::kInt64)
+  {
+    std::cout << "ERROR: faces has to be int64, but was: " << faces.scalar_type() << std::endl;
+    return {};
+  }
 
   std::vector<OpenGL::Vertex> pyegl_vertices;
   pyegl_vertices.reserve(10000);
@@ -171,7 +187,6 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::T
     v.u = ((float*)vertices.data_ptr())[i*9 + 7];
     v.v = ((float*)vertices.data_ptr())[i*9 + 8];
     pyegl_vertices.emplace_back(v);   
-    //std::cout << "vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
   }
 
   std::vector<unsigned int> pyegl_indices;
@@ -179,41 +194,21 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::T
   for (unsigned int i = 0; i < n_faces*3; i++)
   {
     pyegl_indices.emplace_back(static_cast<unsigned int>(((long*)faces.data_ptr())[i]));
-    //std::cout << "index: " << pyegl_indices[i] << std::endl;
   }
 
-  mesh.Init(pyegl_vertices.data(), n_vertices, pyegl_indices.data(), n_faces);
+  mesh.Update(pyegl_vertices.data(), n_vertices, pyegl_indices.data(), n_faces);
 
-  std::cout << "load rigid transformations" << std::endl;
+  OpenGL::mat4 m{};
+
+  for (size_t i = 0; i < pose.size(); i++)
   {
-      std::ifstream file("data/rigid.txt");
-      if (!file.is_open())
-      {
-          rigids.push_back(OpenGL::mat4::Identity());
-          std::cout << "WARNING: unable to load rigid transformations (using identity now)!" << std::endl;
-      }
-      else
-      {
-          while(file.good())
-          {
-              OpenGL::mat4 m{};
-              file  >> m.m00 >> m.m01 >> m.m02 >> m.m03
-                    >> m.m10 >> m.m11 >> m.m12 >> m.m13
-                    >> m.m20 >> m.m21 >> m.m22 >> m.m23
-                    >> m.m30 >> m.m31 >> m.m32 >> m.m33;
-
-              Eigen::Matrix4f mEigen = m.ToEigen();
-              mEigen = mEigen.inverse().eval();
-              m.FromEigen(mEigen);
-              rigids.push_back(m);
-          }
-          file.close();
-      }
-
+    m.data[i] = pose[i];
   }
 
-  std::cout << "create rendertarget" << std::endl;
-  renderTarget.Init(eglContext.GetWidth(), eglContext.GetHeight());
+  Eigen::Matrix4f mEigen = m.ToEigen();
+  mEigen = mEigen.inverse().eval();
+  m.FromEigen(mEigen);
+  rigids.push_back(m);
 
   render(intrinsics);
 

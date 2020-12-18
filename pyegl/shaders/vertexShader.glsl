@@ -28,7 +28,8 @@ void main()
 {
   vec4 pos = vec4(in_position.xyz, 1.0);
 
-  outData.position = (pos.xyz - mesh_normalization.xyz) * (1.0 / mesh_normalization.w);
+  //outData.position = (pos.xyz - mesh_normalization.xyz) * (1.0 / mesh_normalization.w);
+  outData.position = pos.xyz;
   outData.normal = in_normal.xyz;
   outData.color = in_color;
   outData.uv = in_uv;

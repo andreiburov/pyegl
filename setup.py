@@ -9,7 +9,6 @@ setup(
     ext_modules=[
         CUDAExtension('pyegl', 
 											[osp.join('pyegl', 'pyegl.cpp'), osp.join('pyegl', 'FreeImageHelper.cpp')],
-                      cflags=['-g3'],
 											include_dirs=['/rhome/aburov/.local/include'],
                       library_dirs=['/rhome/aburov/.local/lib', '/rhome/aburov/.local/lib64'],
                       libraries=['dl', 'freeimage', 'GL', 'EGL', 'GLESv2', 'GLEW'])

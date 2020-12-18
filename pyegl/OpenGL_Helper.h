@@ -1096,9 +1096,16 @@ struct VertexHash {
 struct Mesh
 {
 public:
-    Mesh(): verbose(false)
+    Mesh(): verbose(false), initialized(false)
     {
+    }
 
+    ~Mesh()
+    {
+        if (initialized)
+        {
+            cudaGraphicsUnregisterResource(VertexVBORes);
+        }
     }
 
     int LoadObjFile(const std::string& filename, float scale=1.0f, bool dynamic_vertex_buffer=false)
@@ -1251,49 +1258,60 @@ public:
         return 0;
     }
 
-    void Init(OpenGL::Vertex* vertices, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool dynamic_vertex_buffer=false)
+    void Init(OpenGL::Vertex* vertices_data, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool dynamic_vertex_buffer=false)
     {
-        // vertices {x,y,z, nx,y,nz, r,g,b, s,t,  mask}
-        // indices {i0, i1, i2}
-        // OpenGL::Vertex pvertex[3];
-        // pvertex[0] = {0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, 0.0f,  0.0f, 0.0f,  1.0f};
-        // pvertex[1] = {1.0f, 0.0f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, 0.0f,  1.0f, 0.0f,  1.0f};
-        // pvertex[2] = {0.0f, 1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, 0.0f,  0.0f, 1.0f,  1.0f};
-        // ushort pindices[3] = {0, 1, 2};
         std::cout << "initialize mesh (" << n_vertices << " | " << n_faces << ")" << std::endl;
 
         glGenBuffers(1, &VertexVBOID);
         glBindBuffer(GL_ARRAY_BUFFER, VertexVBOID);
-        if(dynamic_vertex_buffer) glBufferData(GL_ARRAY_BUFFER, sizeof(OpenGL::Vertex)*n_vertices, &vertices[0].x, GL_DYNAMIC_DRAW);
-        else glBufferData(GL_ARRAY_BUFFER, sizeof(OpenGL::Vertex)*n_vertices, &vertices[0].x, GL_STATIC_DRAW);
-             
+        //glBufferData(GL_ARRAY_BUFFER, sizeof(OpenGL::Vertex)*n_vertices, &vertices[0].x, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(OpenGL::Vertex)*n_vertices, nullptr, GL_DYNAMIC_COPY);
+        checkCudaErrors(cudaGraphicsGLRegisterBuffer(&VertexVBORes, VertexVBOID, cudaGraphicsRegisterFlagsNone));
+
+        checkCudaErrors(cudaGraphicsMapResources(1, &VertexVBORes));
+        float* vboPtr;
+        size_t size;
+        checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void**)&vboPtr, &size, VertexVBORes));
+        checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertices_data, size, cudaMemcpyHostToDevice));
+
+        checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
+        checkCudaErrors(cudaStreamSynchronize(0));
+
         glGenBuffers(1, &IndexVBOID);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndexVBOID);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int)*3*n_faces, indices, GL_STATIC_DRAW);
-        
 
         //https://stackoverflow.com/questions/58022707/glvertexattribpointer-raise-gl-invalid-operation-version-330
         glGenVertexArrays(1, &vao);
-        //glBindVertexArray(vao);
+        glBindVertexArray(vao);
 
         this->n_vertices = n_vertices;
         this->n_faces = n_faces;
+        initialized = true;
+    }
 
-        // compute center of gravity
-        cog.setZero();
-        for(unsigned int i=0; i<n_vertices; ++i)
+    void Update(OpenGL::Vertex* vertices_data, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool dynamic_vertex_buffer=false)
+    {
+        if (!initialized)
         {
-            cog += Eigen::Vector3f(vertices[i].x, vertices[i].y, vertices[i].z);
+            Init(vertices_data, n_vertices, indices, n_faces, dynamic_vertex_buffer);
         }
-        cog /= n_vertices;
-
-        // compute scale
-        extend = 0.0;
-        for(unsigned int i=0; i<n_vertices; ++i)
+        else
         {
-            float d = (Eigen::Vector3f(vertices[i].x, vertices[i].y, vertices[i].z) - cog).norm();
-            if (d>extend)
-                extend = d;
+            if (this->n_vertices != n_vertices || this->n_faces != n_faces)
+            {
+                std::cout << "ERROR: Different amount of vertices or faces in subsequent call" << std::endl;
+                return;
+            }
+
+            checkCudaErrors(cudaGraphicsMapResources(1, &VertexVBORes));
+            float* vboPtr;
+            size_t size;
+            checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void**)&vboPtr, &size, VertexVBORes));
+            checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertices_data, size, cudaMemcpyHostToDevice));
+
+            checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
+            checkCudaErrors(cudaStreamSynchronize(0));
         }
     }
 
@@ -1387,10 +1405,13 @@ private:
     GLuint vao;
     GLuint VertexVBOID, IndexVBOID;
 
+    cudaGraphicsResource_t VertexVBORes;
+
     unsigned int n_vertices;
     unsigned int n_faces;
 
     bool verbose;
+    bool initialized;
 
     Eigen::Vector3f cog; // center of gravity
     float extend; // extend of the mesh around center of gravity (bounding sphere)
