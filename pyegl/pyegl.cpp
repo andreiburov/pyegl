@@ -57,55 +57,69 @@ void pyegl_terminate()
 }
 
 
-void render()
+void render(std::vector<float>& intrinsics)
 {
-    float near = 0.1;
-    float far = 10.0;
-    float fovX = 4.14423;
-    float fovY = 4.27728;
-    float cX = 0.5;
-    float cY = 0.5;
+  float fovX, fovY, cX, cY, near, far;
 
-    // reset viewport, clear
-    eglContext.Clear();
+  if (intrinsics.size() != 6)
+  {
+    fovX = 4.14423; 
+    fovY = 4.27728;
+    cX = 0.5;
+    cY = 0.5;
+    near = 0.1;
+    far = 10.0;
+  }
+  else
+  {
+    fovX = intrinsics[0];
+    fovY = intrinsics[1];
+    cX = intrinsics[2];
+    cY = intrinsics[3];
+    near = intrinsics[4];
+    far = intrinsics[5];
+  }
 
-    renderTarget.Use();
-    renderTarget.Clear();
+  // reset viewport, clear
+  eglContext.Clear();
 
-    // enable depth test
-    glDepthRangef(near, far);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+  renderTarget.Use();
+  renderTarget.Clear();
 
-    // set shader program
-    shaderProgram.Use();
+  // enable depth test
+  glDepthRangef(near, far);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
 
-    // set uniforms
-    transformations.SetModelView(rigids[0]);
-    transformations.SetProjection(fovX, fovY, cX, cY, near, far);
-    transformations.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
-    transformations.Use();
+  // set shader program
+  shaderProgram.Use();
 
-    // render mesh
-    mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
+  // set uniforms
+  transformations.SetModelView(rigids[0]);
+  transformations.SetProjection(fovX, fovY, cX, cY, near, far);
+  transformations.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
+  transformations.Use();
 
-    // write rendertarget to file
-    renderTarget.WriteToFile("results/fbo_color_rendering_" + std::to_string(0) + ".png", 0);
-    renderTarget.WriteToFile("results/fbo_position_rendering_" + std::to_string(0) + ".png", 1);
-    renderTarget.WriteToFile("results/fbo_normal_rendering_" + std::to_string(0) + ".png", 2);
-    renderTarget.WriteToFile("results/fbo_uv_rendering_" + std::to_string(0) + ".png", 3);
-    renderTarget.WriteToFile("results/fbo_bary_rendering_" + std::to_string(0) + ".png", 4);
-    renderTarget.WriteToFile("results/fbo_vids_rendering_" + std::to_string(0) + ".png", 5);
+  // render mesh
+  mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
 
-    // save screenshot
-    eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(0) + ".ppm");
+  // write rendertarget to file
+  renderTarget.WriteToFile("results/fbo_color_rendering_" + std::to_string(0) + ".png", 0);
+  renderTarget.WriteToFile("results/fbo_position_rendering_" + std::to_string(0) + ".png", 1);
+  renderTarget.WriteToFile("results/fbo_normal_rendering_" + std::to_string(0) + ".png", 2);
+  renderTarget.WriteToFile("results/fbo_uv_rendering_" + std::to_string(0) + ".png", 3);
+  renderTarget.WriteToFile("results/fbo_bary_rendering_" + std::to_string(0) + ".png", 4);
+  renderTarget.WriteToFile("results/fbo_vids_rendering_" + std::to_string(0) + ".png", 5);
 
-    // flush and swap buffers
-    eglContext.SwapBuffer();
+  // save screenshot
+  eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(0) + ".ppm");
+
+  // flush and swap buffers
+  eglContext.SwapBuffer();
 }
 
 
-std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::Tensor vertices, torch::Tensor faces)
+std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::Tensor vertices, unsigned int n_vertices, torch::Tensor faces, unsigned int n_faces)
 {
   std::cout << "pyegl_forward" << std::endl;
   if (internal_state != InternalState::INITIALIZED)
@@ -138,8 +152,37 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::T
   mask_loc = shaderProgram.GetAttribLocation("in_mask");
 
   std::cout << "load mesh data" << std::endl;
-  mesh.LoadObjFile("data/bunny_col.obj", 1.0f);
+  //mesh.LoadObjFile("data/bunny_col.obj", 1.0f);
 
+  std::cout << "------------------------------" << std::endl;
+
+  std::vector<OpenGL::Vertex> pyegl_vertices;
+  pyegl_vertices.reserve(10000);
+  for (unsigned int i = 0; i < n_vertices; i++)
+  {
+    OpenGL::Vertex v;
+    v.x = ((float*)vertices.data_ptr())[i*9 + 0];
+    v.y = ((float*)vertices.data_ptr())[i*9 + 1];
+    v.z = ((float*)vertices.data_ptr())[i*9 + 2];
+    v.r = ((float*)vertices.data_ptr())[i*9 + 3];
+    v.g = ((float*)vertices.data_ptr())[i*9 + 4];
+    v.b = ((float*)vertices.data_ptr())[i*9 + 5];
+    v.a = ((float*)vertices.data_ptr())[i*9 + 6];
+    v.u = ((float*)vertices.data_ptr())[i*9 + 7];
+    v.v = ((float*)vertices.data_ptr())[i*9 + 8];
+    pyegl_vertices.emplace_back(v);   
+    //std::cout << "vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
+  }
+
+  std::vector<unsigned int> pyegl_indices;
+  pyegl_indices.reserve(10000);
+  for (unsigned int i = 0; i < n_faces*3; i++)
+  {
+    pyegl_indices.emplace_back(static_cast<unsigned int>(((long*)faces.data_ptr())[i]));
+    //std::cout << "index: " << pyegl_indices[i] << std::endl;
+  }
+
+  mesh.Init(pyegl_vertices.data(), n_vertices, pyegl_indices.data(), n_faces);
 
   std::cout << "load rigid transformations" << std::endl;
   {
@@ -172,7 +215,7 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, torch::T
   std::cout << "create rendertarget" << std::endl;
   renderTarget.Init(eglContext.GetWidth(), eglContext.GetHeight());
 
-  render();
+  render(intrinsics);
 
   return {vertices, faces};
 }

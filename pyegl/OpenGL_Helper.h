@@ -19,7 +19,7 @@
 
 #include "eigen/Eigen/Eigen"
 #ifndef NO_FREEIMAGE
-    #include "FreeImageHelper.h"
+#include "FreeImageHelper.h"
 #endif
 
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -1055,9 +1055,14 @@ struct Vertex
 {
   float x, y, z;        // Vertex
   float nx, ny, nz;     // Normal
-  float r,g,b, a;       // color
+  float r, g, b, a;       // color
   float u, v;           // Texcoord
   float mask;           // mask
+
+  Vertex()
+  : x(0), y(0), z(0), nx(0), ny(0), nz(1), r(1), g(1), b(0), a(1), u(0), v(0), mask(1)
+  {
+  }
 
   bool operator==(Vertex const& o) const {
       if (x != o.x || y != o.y || z != o.z)
@@ -1140,16 +1145,15 @@ public:
                     v.v = attrib.texcoords[2 * index.texcoord_index + 1];
                 }
 
-                //std::cout << "new vertex " << v.x << " " << v.y << " " << v.z << std::endl;
+                //std::cout << "vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
 
                 if (uniqueVertices.count(v) == 0) {
-                    //std::cout << "add to hashmap" << std::endl;
                     uniqueVertices[v] = static_cast<uint32_t>(vertices.size());
                     vertices.push_back(v);
                 }
 
                 indices.push_back(uniqueVertices[v]);
-                //std::cout << "count: " << uniqueVertices.count(v) << std::endl;
+                //std::cout << "index: " << indices[indices.size() - 1] << std::endl;
             }
         }
 
@@ -1217,11 +1221,9 @@ public:
             v.g /= 255.0f;
             v.b /= 255.0f;
             v.a /= 255.0f;
-            
             v.nx = 0.0f;
             v.ny = 0.0f;
             v.nz = 1.0f;
-
             v.mask = 1.0f;
 
             vertices.push_back(v);
