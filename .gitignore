@@ -1,0 +1,14 @@
+# Project related
+EGLServerRenderer
+results/
+
+# Python
+*.pyc
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
