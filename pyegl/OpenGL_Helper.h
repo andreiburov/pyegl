@@ -412,42 +412,42 @@ public:
         // color texture to render to   
         glGenTextures(1, &color_texture);
         glBindTexture(GL_TEXTURE_2D, color_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0); // initialize with an empty image
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
         // position texture to render to   
         glGenTextures(1, &position_texture);
         glBindTexture(GL_TEXTURE_2D, position_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, 0); // initialize with an empty image
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
         // normal texture
         glGenTextures(1, &normal_texture);
         glBindTexture(GL_TEXTURE_2D, normal_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, 0); // initialize with an empty image
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
         // uv texture
         glGenTextures(1, &uv_texture);
         glBindTexture(GL_TEXTURE_2D, uv_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, width, height, 0, GL_RG, GL_FLOAT, 0); // initialize with an empty image
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, width, height, 0, GL_RG, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
         // bary texture
         glGenTextures(1, &bary_texture);
         glBindTexture(GL_TEXTURE_2D, bary_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, 0); // initialize with an empty image
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
         // vids texture
         glGenTextures(1, &vids_texture);
         glBindTexture(GL_TEXTURE_2D, vids_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, 0); // initialize with an empty image
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
@@ -489,8 +489,15 @@ public:
         cudaMalloc((void**)&(buffer[1]), width*height*4*sizeof(float));
         cudaMalloc((void**)&(buffer[2]), width*height*4*sizeof(float));
         cudaMalloc((void**)&(buffer[3]), width*height*2*sizeof(float));
-        cudaMalloc((void**)&(buffer[4]), width*height*3*sizeof(float));
-        cudaMalloc((void**)&(buffer[5]), width*height*3*sizeof(float));
+        cudaMalloc((void**)&(buffer[4]), width*height*4*sizeof(float));
+        cudaMalloc((void**)&(buffer[5]), width*height*4*sizeof(float));
+
+        //buffer[0] = (float*)malloc(width*height*4*sizeof(float));
+        //buffer[1] = (float*)malloc(width*height*4*sizeof(float));
+        //buffer[2] = (float*)malloc(width*height*4*sizeof(float));
+        //buffer[3] = (float*)malloc(width*height*2*sizeof(float));
+        //buffer[4] = (float*)malloc(width*height*4*sizeof(float));
+        //buffer[5] = (float*)malloc(width*height*4*sizeof(float));
 
         return 1;
     }
@@ -501,6 +508,7 @@ public:
         {
             cudaGraphicsUnregisterResource(graphics_resource[i]);
             cudaFree(buffer[i]);
+            //free(buffer[i]);
         }
     }
 
@@ -514,7 +522,7 @@ public:
     void Clear()
     {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
+        glClearColor(-1.0f, -1.0f, -1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
@@ -541,29 +549,28 @@ public:
         checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[3], 0, 0));
         checkCudaErrors(cudaMemcpy2DFromArray(buffer[3], width*sizeof(float)*2, cuda_array, 0, 0, width*sizeof(float)*2, height, copy_mode));
         checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[4], 0, 0));
-        checkCudaErrors(cudaMemcpy2DFromArray(buffer[4], width*sizeof(float)*3, cuda_array, 0, 0, width*sizeof(float)*3, height, copy_mode));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[4], width*sizeof(float)*4, cuda_array, 0, 0, width*sizeof(float)*4, height, copy_mode));
         checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[5], 0, 0));
-        checkCudaErrors(cudaMemcpy2DFromArray(buffer[5], width*sizeof(unsigned int)*3, cuda_array, 0, 0, width*sizeof(unsigned int)*3, height, copy_mode));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[5], width*sizeof(float)*4, cuda_array, 0, 0, width*sizeof(float)*4, height, copy_mode));
         checkCudaErrors(cudaGraphicsUnmapResources(NUM_GRAPHICS_RESOURCES, graphics_resource));
     }
 
     void WriteDataToFile(const std::string& filename, float* data, unsigned int tex_id=0)
     {
         size_t format_nchannels = 4;
-        size_t element_size = sizeof(float);
         switch (tex_id)
         {
             case 0:  break;
             case 1:  break;
             case 2:  break;
             case 3:  format_nchannels = 2; break;
-            case 4:  format_nchannels = 3; break;
-            case 5:  format_nchannels = 3; element_size = sizeof(unsigned int); break;
+            case 4:  break;
+            case 5:  break;
             default: break;
         }
 
         FreeImage image(width, height, format_nchannels);
-        std::memcpy(image.data, data, width*height*format_nchannels*element_size);
+        std::memcpy(image.data, data, width*height*format_nchannels*sizeof(float));
         if(!image.SaveImageToFile(filename, true))
         {
             std::cout << "WARNING: unable to write image file:" << filename << std::endl;
@@ -580,8 +587,8 @@ public:
             case 1:  texture_id = position_texture; break;
             case 2:  texture_id = normal_texture; break;
             case 3:  texture_id = uv_texture; format_nchannels = 2; break;
-            case 4:  texture_id = bary_texture; format_nchannels = 3; break;
-            case 5:  texture_id = vids_texture; format_nchannels = 3; break;
+            case 4:  texture_id = bary_texture; break;
+            case 5:  texture_id = vids_texture; break;
             default: texture_id = color_texture; break;
         }
 

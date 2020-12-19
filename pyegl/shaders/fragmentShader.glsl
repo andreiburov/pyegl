@@ -14,13 +14,12 @@ in FragmentData
 
 
 // output buffers
-layout(location = 0) out vec4  frag_color;
-layout(location = 1) out vec4  frag_position;
-layout(location = 2) out vec4  frag_normal;
-layout(location = 3) out vec2  frag_uv;
-layout(location = 4) out vec3  frag_bary;
-//layout(location = 5) out uvec3 frag_vertexIds;
-layout(location = 5) out ivec3 frag_vertexIds;
+layout(location = 0) out vec4 frag_color;
+layout(location = 1) out vec4 frag_position;
+layout(location = 2) out vec4 frag_normal;
+layout(location = 3) out vec2 frag_uv;
+layout(location = 4) out vec4 frag_bary;
+layout(location = 5) out vec4 frag_vertexIds;
 
 
 void  main()
@@ -32,9 +31,8 @@ void  main()
     frag_normal = vec4(fragData.normal.xyz, 1.0);
     frag_normal.z *= -1.0f; // for visualization
     frag_uv = fragData.uv;
-    frag_bary = fragData.baryCoord;
-    //frag_vertexIds = fragData.vertexIds;
-    frag_vertexIds = ivec3(fragData.vertexIds);
+    frag_bary = vec4(fragData.baryCoord, 1.0);
+    frag_vertexIds = vec4(fragData.vertexIds, 1.0);
 }
 
 

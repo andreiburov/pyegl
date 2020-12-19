@@ -140,9 +140,9 @@ void render(std::vector<float>& intrinsics)
 
   // render mesh
   mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
-
   renderTarget.CopyRenderedTexturesToCUDA();
 
+  //renderTarget.CopyRenderedTexturesToCUDA(true);
   //renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
   //renderTarget.WriteDataToFile("results/cuda_position_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[1], 1);
   //renderTarget.WriteDataToFile("results/cuda_normal_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[2], 2);
@@ -159,7 +159,7 @@ void render(std::vector<float>& intrinsics)
   renderTarget.WriteToFile("results/fbo_vids_" + std::to_string(frame_count) + ".png", 5);
 
   // save screenshot
-  eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(frame_count) + ".ppm");
+  // eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(frame_count) + ".ppm");
   frame_count++;
 
   // flush and swap buffers
@@ -252,12 +252,11 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
   auto uv_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
   auto uv_map = torch::from_blob(renderTarget.GetBuffers()[3], {g_height, g_width, 2}, uv_options);
   auto bary_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
-  auto bary_map = torch::from_blob(renderTarget.GetBuffers()[4], {g_height, g_width, 3}, bary_options);
-  auto vids_options = torch::TensorOptions().dtype(torch::kInt32).layout(torch::kStrided).device(device);
-  auto vids_map = torch::from_blob(renderTarget.GetBuffers()[5], {g_height, g_width, 3}, vids_options);
+  auto bary_map = torch::from_blob(renderTarget.GetBuffers()[4], {g_height, g_width, 4}, bary_options);
+  auto vids_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
+  auto vids_map = torch::from_blob(renderTarget.GetBuffers()[5], {g_height, g_width, 4}, vids_options);
 
   return {color_map, position_map, normal_map, uv_map, bary_map, vids_map};
-  //return {vertices, indices};
 }
 
 
