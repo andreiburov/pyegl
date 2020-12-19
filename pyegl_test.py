@@ -23,5 +23,21 @@ width, height = 512, 512
 
 pyegl.init(width, height)
 maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
+
+import matplotlib.pyplot as plt
+plt.figure(0)
+plt.imshow(maps[0].cpu().numpy())
+plt.figure(1)
+plt.imshow(maps[1].cpu().numpy()[..., 0:3])
+plt.figure(2)
+plt.imshow(maps[2].cpu().numpy()[..., 0:3])
+plt.figure(3)
+plt.imshow(torch.cat((maps[3], torch.ones((width, height, 1), dtype=torch.float32).cuda()), dim=-1).cpu().numpy())
+plt.figure(4)
+plt.imshow(maps[4].cpu().numpy())
+plt.figure(5)
+plt.imshow(maps[5].cpu().numpy())
+plt.show()
+
 maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
 pyegl.terminate()

@@ -19,7 +19,8 @@ layout(location = 1) out vec4  frag_position;
 layout(location = 2) out vec4  frag_normal;
 layout(location = 3) out vec2  frag_uv;
 layout(location = 4) out vec3  frag_bary;
-layout(location = 5) out uvec3 frag_vertexIds;
+//layout(location = 5) out uvec3 frag_vertexIds;
+layout(location = 5) out ivec3 frag_vertexIds;
 
 
 void  main()
@@ -32,7 +33,8 @@ void  main()
     frag_normal.z *= -1.0f; // for visualization
     frag_uv = fragData.uv;
     frag_bary = fragData.baryCoord;
-    frag_vertexIds = fragData.vertexIds;
+    //frag_vertexIds = fragData.vertexIds;
+    frag_vertexIds = ivec3(fragData.vertexIds);
 }
 
 

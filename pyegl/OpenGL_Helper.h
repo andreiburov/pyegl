@@ -485,19 +485,12 @@ public:
         checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[4], bary_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
         checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[5], vids_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
 
-        //cudaMalloc((void**)&(buffer[0]), width*height*4*sizeof(float));
-        //cudaMalloc((void**)&(buffer[1]), width*height*4*sizeof(float));
-        //cudaMalloc((void**)&(buffer[2]), width*height*4*sizeof(float));
-        //cudaMalloc((void**)&(buffer[3]), width*height*2*sizeof(float));
-        //cudaMalloc((void**)&(buffer[4]), width*height*3*sizeof(float));
-        //cudaMalloc((void**)&(buffer[5]), width*height*3*sizeof(float));
-         
-        buffer[0] = (float*)malloc(width*height*4*sizeof(float));
-        buffer[1] = (float*)malloc(width*height*4*sizeof(float));
-        buffer[2] = (float*)malloc(width*height*4*sizeof(float));
-        buffer[3] = (float*)malloc(width*height*2*sizeof(float));
-        buffer[4] = (float*)malloc(width*height*3*sizeof(float));
-        buffer[5] = (float*)malloc(width*height*3*sizeof(float));
+        cudaMalloc((void**)&(buffer[0]), width*height*4*sizeof(float));
+        cudaMalloc((void**)&(buffer[1]), width*height*4*sizeof(float));
+        cudaMalloc((void**)&(buffer[2]), width*height*4*sizeof(float));
+        cudaMalloc((void**)&(buffer[3]), width*height*2*sizeof(float));
+        cudaMalloc((void**)&(buffer[4]), width*height*3*sizeof(float));
+        cudaMalloc((void**)&(buffer[5]), width*height*3*sizeof(float));
 
         return 1;
     }
@@ -507,8 +500,7 @@ public:
         for (int i = 0; i < NUM_GRAPHICS_RESOURCES; i++)
         {
             cudaGraphicsUnregisterResource(graphics_resource[i]);
-            //cudaFree(buffer[i]);
-            free(buffer[i]);
+            cudaFree(buffer[i]);
         }
     }
 

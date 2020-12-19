@@ -43,10 +43,15 @@ static GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc;
 static OpenGL::Transformations transformations;
 static std::vector<OpenGL::mat4> rigids;
 static unsigned int frame_count = 0;
+static unsigned int g_width = 512;
+static unsigned int g_height = 512;
 
 
 void pyegl_init(unsigned int width, unsigned int height)
 {
+  g_width = width;
+  g_height = height;
+
   // init egl context
   eglContext.Init(width, height);
 
@@ -136,14 +141,14 @@ void render(std::vector<float>& intrinsics)
   // render mesh
   mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
 
-  renderTarget.CopyRenderedTexturesToCUDA(true);
+  renderTarget.CopyRenderedTexturesToCUDA();
 
-  renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
-  renderTarget.WriteDataToFile("results/cuda_position_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[1], 1);
-  renderTarget.WriteDataToFile("results/cuda_normal_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[2], 2);
-  renderTarget.WriteDataToFile("results/cuda_uv_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[3], 3);
-  renderTarget.WriteDataToFile("results/cuda_bary_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[4], 4);
-  renderTarget.WriteDataToFile("results/cuda_vids_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[5], 5);
+  //renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
+  //renderTarget.WriteDataToFile("results/cuda_position_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[1], 1);
+  //renderTarget.WriteDataToFile("results/cuda_normal_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[2], 2);
+  //renderTarget.WriteDataToFile("results/cuda_uv_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[3], 3);
+  //renderTarget.WriteDataToFile("results/cuda_bary_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[4], 4);
+  //renderTarget.WriteDataToFile("results/cuda_vids_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[5], 5);
 
   // write rendertarget to file
   renderTarget.WriteToFile("results/fbo_color_" + std::to_string(frame_count) + ".png", 0);
@@ -237,7 +242,22 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
 
   render(intrinsics);
 
-  return {vertices, indices};
+  auto device = vertices.device();
+  auto color_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
+  auto color_map = torch::from_blob(renderTarget.GetBuffers()[0], {g_height, g_width, 4}, color_options);
+  auto position_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
+  auto position_map = torch::from_blob(renderTarget.GetBuffers()[1], {g_height, g_width, 4}, position_options);
+  auto normal_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
+  auto normal_map = torch::from_blob(renderTarget.GetBuffers()[2], {g_height, g_width, 4}, normal_options);
+  auto uv_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
+  auto uv_map = torch::from_blob(renderTarget.GetBuffers()[3], {g_height, g_width, 2}, uv_options);
+  auto bary_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
+  auto bary_map = torch::from_blob(renderTarget.GetBuffers()[4], {g_height, g_width, 3}, bary_options);
+  auto vids_options = torch::TensorOptions().dtype(torch::kInt32).layout(torch::kStrided).device(device);
+  auto vids_map = torch::from_blob(renderTarget.GetBuffers()[5], {g_height, g_width, 3}, vids_options);
+
+  return {color_map, position_map, normal_map, uv_map, bary_map, vids_map};
+  //return {vertices, indices};
 }
 
 
