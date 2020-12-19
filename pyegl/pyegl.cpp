@@ -84,6 +84,8 @@ void pyegl_init(unsigned int width, unsigned int height)
 void pyegl_terminate()
 {
   internal_state = InternalState::UNINITIALIZED;
+  mesh.Terminate();
+  renderTarget.Terminate();
   eglContext.Terminate();
 }
 
@@ -134,13 +136,22 @@ void render(std::vector<float>& intrinsics)
   // render mesh
   mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
 
+  renderTarget.CopyRenderedTexturesToCUDA(true);
+
+  renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
+  renderTarget.WriteDataToFile("results/cuda_position_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[1], 1);
+  renderTarget.WriteDataToFile("results/cuda_normal_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[2], 2);
+  renderTarget.WriteDataToFile("results/cuda_uv_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[3], 3);
+  renderTarget.WriteDataToFile("results/cuda_bary_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[4], 4);
+  renderTarget.WriteDataToFile("results/cuda_vids_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[5], 5);
+
   // write rendertarget to file
-  renderTarget.WriteToFile("results/fbo_color_rendering_" + std::to_string(frame_count) + ".png", 0);
-  renderTarget.WriteToFile("results/fbo_position_rendering_" + std::to_string(frame_count) + ".png", 1);
-  renderTarget.WriteToFile("results/fbo_normal_rendering_" + std::to_string(frame_count) + ".png", 2);
-  renderTarget.WriteToFile("results/fbo_uv_rendering_" + std::to_string(frame_count) + ".png", 3);
-  renderTarget.WriteToFile("results/fbo_bary_rendering_" + std::to_string(frame_count) + ".png", 4);
-  renderTarget.WriteToFile("results/fbo_vids_rendering_" + std::to_string(frame_count) + ".png", 5);
+  renderTarget.WriteToFile("results/fbo_color_" + std::to_string(frame_count) + ".png", 0);
+  renderTarget.WriteToFile("results/fbo_position_" + std::to_string(frame_count) + ".png", 1);
+  renderTarget.WriteToFile("results/fbo_normal_" + std::to_string(frame_count) + ".png", 2);
+  renderTarget.WriteToFile("results/fbo_uv_" + std::to_string(frame_count) + ".png", 3);
+  renderTarget.WriteToFile("results/fbo_bary_" + std::to_string(frame_count) + ".png", 4);
+  renderTarget.WriteToFile("results/fbo_vids_" + std::to_string(frame_count) + ".png", 5);
 
   // save screenshot
   eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(frame_count) + ".ppm");
@@ -150,8 +161,19 @@ void render(std::vector<float>& intrinsics)
   eglContext.SwapBuffer();
 }
 
+std::vector<unsigned int> map_indices(const torch::Tensor& indices, unsigned int n_faces)
+{
+  std::vector<unsigned int> gl_indices;
+  gl_indices.reserve(n_faces*3);
+  for (unsigned int i = 0; i < n_faces*3; i++)
+  {
+    gl_indices.emplace_back(static_cast<unsigned int>(((long*)indices.data_ptr())[i]));
+  }
 
-std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vector<float> pose, torch::Tensor vertices, unsigned int n_vertices, torch::Tensor faces, unsigned int n_faces)
+  return gl_indices;
+}
+
+std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vector<float> pose, torch::Tensor vertices, unsigned int n_vertices, torch::Tensor indices, unsigned int n_faces)
 {
   std::cout << "pyegl_forward" << std::endl;
   if (internal_state != InternalState::INITIALIZED)
@@ -166,38 +188,41 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
     return {};
   }
 
-  if (faces.scalar_type() != torch::kInt64)
+  if (!vertices.is_cuda())
   {
-    std::cout << "ERROR: faces has to be int64, but was: " << faces.scalar_type() << std::endl;
+    std::cout << "WARNING: vertices should be placed on CUDA, but was: " << vertices.device() << std::endl;
     return {};
   }
 
-  std::vector<OpenGL::Vertex> pyegl_vertices;
-  pyegl_vertices.reserve(10000);
-  for (unsigned int i = 0; i < n_vertices; i++)
+  if (indices.scalar_type() != torch::kInt64)
   {
-    OpenGL::Vertex v;
-    v.x = ((float*)vertices.data_ptr())[i*9 + 0];
-    v.y = ((float*)vertices.data_ptr())[i*9 + 1];
-    v.z = ((float*)vertices.data_ptr())[i*9 + 2];
-    v.r = ((float*)vertices.data_ptr())[i*9 + 3];
-    v.g = ((float*)vertices.data_ptr())[i*9 + 4];
-    v.b = ((float*)vertices.data_ptr())[i*9 + 5];
-    v.a = ((float*)vertices.data_ptr())[i*9 + 6];
-    v.u = ((float*)vertices.data_ptr())[i*9 + 7];
-    v.v = ((float*)vertices.data_ptr())[i*9 + 8];
-    pyegl_vertices.emplace_back(v);   
+    std::cout << "ERROR: indices has to be int64, but was: " << indices.scalar_type() << std::endl;
+    return {};
+  }
+  
+  if (indices.device() != torch::kCPU)
+  {
+    std::cout << "ERROR: faces has to be placed on CPU, but was: " << indices.device() << std::endl;
+    return {};
   }
 
-  std::vector<unsigned int> pyegl_indices;
-  pyegl_indices.reserve(10000);
-  for (unsigned int i = 0; i < n_faces*3; i++)
+  if (!mesh.IsInitialized())
   {
-    pyegl_indices.emplace_back(static_cast<unsigned int>(((long*)faces.data_ptr())[i]));
+    mesh.Init((OpenGL::Vertex*)vertices.data_ptr(), n_vertices, map_indices(indices, n_faces).data(), n_faces, vertices.is_cuda());
   }
-
-  mesh.Update(pyegl_vertices.data(), n_vertices, pyegl_indices.data(), n_faces);
-
+  else if (mesh.GetNumberOfVertices() != n_vertices || mesh.GetNumberOfFaces() != n_faces || mesh.IsVertexDataOnCUDA() != vertices.is_cuda())
+  {
+    //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawElements.xhtml
+    //type must be on of GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT, or GL_UNSIGNED_INT
+    std::cout << "ERROR: Different amount of vertices or faces in subsequent call: (" << n_vertices << "|" << n_faces << ")" << std::endl;
+    mesh.Terminate();
+    mesh.Init((OpenGL::Vertex*)vertices.data_ptr(), n_vertices, map_indices(indices, n_faces).data(), n_faces, vertices.is_cuda());
+  }
+  else
+  {
+    mesh.Update((OpenGL::Vertex*)vertices.data_ptr(), n_vertices, vertices.is_cuda());
+  }
+  
   OpenGL::mat4 m{};
 
   for (size_t i = 0; i < pose.size(); i++)
@@ -212,7 +237,7 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
 
   render(intrinsics);
 
-  return {vertices, faces};
+  return {vertices, indices};
 }
 
 

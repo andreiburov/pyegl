@@ -8,7 +8,6 @@ in FragmentData
     vec4 color;
     vec2 uv;
     float mask;
-
     vec3 baryCoord;
     flat uvec3 vertexIds;
 } fragData;

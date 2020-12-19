@@ -396,6 +396,7 @@ private:
 class RenderTarget
 {
 public:
+
     int Init(unsigned int _width, unsigned int _height)
     {
         width = _width;
@@ -414,13 +415,6 @@ public:
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0); // initialize with an empty image
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-
-        checkCudaErrors(cudaGraphicsGLRegisterImage(&cuda_dest_resource[0], color_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
-        for (int i = 0; i < NUM_GRAPHICS_RESOURCES; i++)
-        {
-            cudaMalloc((void**)&(cuda_buffer[i]), 4 * sizeof(float) * width * height);
-            buffer[i] = (float*)malloc(width*height*4*sizeof(float));
-        }
 
         // position texture to render to   
         glGenTextures(1, &position_texture);
@@ -477,7 +471,6 @@ public:
                                  GL_COLOR_ATTACHMENT4, GL_COLOR_ATTACHMENT5};
         glDrawBuffers(6, DrawBuffers);
 
-
         // Always check that our framebuffer is ok
         if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         {
@@ -485,8 +478,40 @@ public:
             return -1;
         }
 
+        checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[0], color_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+        checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[1], position_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+        checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[2], normal_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+        checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[3], uv_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+        checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[4], bary_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+        checkCudaErrors(cudaGraphicsGLRegisterImage(&graphics_resource[5], vids_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+
+        //cudaMalloc((void**)&(buffer[0]), width*height*4*sizeof(float));
+        //cudaMalloc((void**)&(buffer[1]), width*height*4*sizeof(float));
+        //cudaMalloc((void**)&(buffer[2]), width*height*4*sizeof(float));
+        //cudaMalloc((void**)&(buffer[3]), width*height*2*sizeof(float));
+        //cudaMalloc((void**)&(buffer[4]), width*height*3*sizeof(float));
+        //cudaMalloc((void**)&(buffer[5]), width*height*3*sizeof(float));
+         
+        buffer[0] = (float*)malloc(width*height*4*sizeof(float));
+        buffer[1] = (float*)malloc(width*height*4*sizeof(float));
+        buffer[2] = (float*)malloc(width*height*4*sizeof(float));
+        buffer[3] = (float*)malloc(width*height*2*sizeof(float));
+        buffer[4] = (float*)malloc(width*height*3*sizeof(float));
+        buffer[5] = (float*)malloc(width*height*3*sizeof(float));
+
         return 1;
     }
+
+    void Terminate()
+    {
+        for (int i = 0; i < NUM_GRAPHICS_RESOURCES; i++)
+        {
+            cudaGraphicsUnregisterResource(graphics_resource[i]);
+            //cudaFree(buffer[i]);
+            free(buffer[i]);
+        }
+    }
+
 
     void Use()
     {
@@ -503,20 +528,50 @@ public:
         glDepthFunc(GL_LESS);
     }
 
-    void Terminate()
+    void CopyRenderedTexturesToCUDA(bool copy_to_host=false)
     {
-        for (int i = 0; i < NUM_GRAPHICS_RESOURCES; i++)
-        {
-            cudaGraphicsUnregisterResource(cuda_dest_resource[i]);
-            cudaFree(cuda_buffer[i]);
-            free(buffer[i]);
+        cudaMemcpyKind copy_mode;
+        
+        if (copy_to_host) {
+            copy_mode = cudaMemcpyDeviceToHost;
+        } else {
+            copy_mode = cudaMemcpyDeviceToDevice;
         }
+         
+        checkCudaErrors(cudaGraphicsMapResources(NUM_GRAPHICS_RESOURCES, graphics_resource));
+        cudaArray* cuda_array;
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[0], 0, 0));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[0], width*sizeof(float)*4, cuda_array, 0, 0, width*sizeof(float)*4, height, copy_mode));
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[1], 0, 0));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[1], width*sizeof(float)*4, cuda_array, 0, 0, width*sizeof(float)*4, height, copy_mode));
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[2], 0, 0));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[2], width*sizeof(float)*4, cuda_array, 0, 0, width*sizeof(float)*4, height, copy_mode));
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[3], 0, 0));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[3], width*sizeof(float)*2, cuda_array, 0, 0, width*sizeof(float)*2, height, copy_mode));
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[4], 0, 0));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[4], width*sizeof(float)*3, cuda_array, 0, 0, width*sizeof(float)*3, height, copy_mode));
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_array, graphics_resource[5], 0, 0));
+        checkCudaErrors(cudaMemcpy2DFromArray(buffer[5], width*sizeof(unsigned int)*3, cuda_array, 0, 0, width*sizeof(unsigned int)*3, height, copy_mode));
+        checkCudaErrors(cudaGraphicsUnmapResources(NUM_GRAPHICS_RESOURCES, graphics_resource));
     }
 
-    void WriteDataToFile(const std::string& filename, float* data, size_t size)
+    void WriteDataToFile(const std::string& filename, float* data, unsigned int tex_id=0)
     {
-        FreeImage image(width, height, 4);
-        std::memcpy(image.data, data, size);
+        size_t format_nchannels = 4;
+        size_t element_size = sizeof(float);
+        switch (tex_id)
+        {
+            case 0:  break;
+            case 1:  break;
+            case 2:  break;
+            case 3:  format_nchannels = 2; break;
+            case 4:  format_nchannels = 3; break;
+            case 5:  format_nchannels = 3; element_size = sizeof(unsigned int); break;
+            default: break;
+        }
+
+        FreeImage image(width, height, format_nchannels);
+        std::memcpy(image.data, data, width*height*format_nchannels*element_size);
         if(!image.SaveImageToFile(filename, true))
         {
             std::cout << "WARNING: unable to write image file:" << filename << std::endl;
@@ -575,17 +630,7 @@ public:
         return NUM_GRAPHICS_RESOURCES;
     }
 
-    cudaGraphicsResource_t* GetDestGraphicsResources()
-    {
-        return cuda_dest_resource;
-    }
-
-    float** GetCudaResources()
-    {
-        return cuda_buffer;
-    }
-
-    float** GetHostResources()
+    float** GetBuffers()
     {
         return buffer;
     }
@@ -605,11 +650,9 @@ private:
     GLuint vids_texture;
 
     // cuda graphics resources
-    static const int NUM_GRAPHICS_RESOURCES = 1;
-    cudaGraphicsResource_t cuda_dest_resource[NUM_GRAPHICS_RESOURCES];
-
+    static const int NUM_GRAPHICS_RESOURCES = 6;
+    cudaGraphicsResource_t graphics_resource[NUM_GRAPHICS_RESOURCES];
     float* buffer[NUM_GRAPHICS_RESOURCES];
-    float* cuda_buffer[NUM_GRAPHICS_RESOURCES];
 
     // depth buffer
     GLuint depth_buffer;
@@ -1087,7 +1130,6 @@ struct VertexHash {
         hash_combine(hash, v.z);
         hash_combine(hash, v.u);
         hash_combine(hash, v.v);
-        //std::cout << "hash: " << hash << ", vertex " << v.x << " " << v.y << " " << v.z << std::endl;
         return hash;
     }
 };
@@ -1100,15 +1142,7 @@ public:
     {
     }
 
-    ~Mesh()
-    {
-        if (initialized)
-        {
-            cudaGraphicsUnregisterResource(VertexVBORes);
-        }
-    }
-
-    int LoadObjFile(const std::string& filename, float scale=1.0f, bool dynamic_vertex_buffer=false)
+    int LoadObjFile(const std::string& filename, float scale=1.0f)
     {
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
@@ -1164,12 +1198,12 @@ public:
             }
         }
 
-        Init(vertices.data(), vertices.size(), indices.data(), indices.size() /3, dynamic_vertex_buffer);
+        Init(vertices.data(), vertices.size(), indices.data(), indices.size() / 3);
 
         return 0;
     }
 
-    int LoadOffFile(const std::string& filename, float scale=1.0f, bool dynamic_vertex_buffer=false)
+    int LoadOffFile(const std::string& filename, float scale=1.0f)
     {
         std::vector<Vertex> vertices;
         std::vector<unsigned int> indices;
@@ -1253,18 +1287,30 @@ public:
 
 
         file.close();
-        Init(vertices.data(), vertices.size(), indices.data(), indices.size() /3, dynamic_vertex_buffer);
+        Init(vertices.data(), vertices.size(), indices.data(), indices.size() / 3);
 
         return 0;
     }
 
-    void Init(OpenGL::Vertex* vertices_data, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool dynamic_vertex_buffer=false)
+    void Terminate()
+    {
+        if (initialized)
+        {
+            //code=4(cudaErrorCudartUnloading) when executed in destructor
+            checkCudaErrors(cudaGraphicsUnregisterResource(VertexVBORes));
+            const GLuint buffers[2] = {VertexVBOID, IndexVBOID};
+            glDeleteBuffers(2, buffers);
+            glDeleteVertexArrays(1, &vao);
+            initialized = false;
+        }
+    }
+
+    void Init(OpenGL::Vertex* vertex_data, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool vertex_data_on_cuda=false)
     {
         std::cout << "initialize mesh (" << n_vertices << " | " << n_faces << ")" << std::endl;
 
         glGenBuffers(1, &VertexVBOID);
         glBindBuffer(GL_ARRAY_BUFFER, VertexVBOID);
-        //glBufferData(GL_ARRAY_BUFFER, sizeof(OpenGL::Vertex)*n_vertices, &vertices[0].x, GL_DYNAMIC_DRAW);
         glBufferData(GL_ARRAY_BUFFER, sizeof(OpenGL::Vertex)*n_vertices, nullptr, GL_DYNAMIC_COPY);
         checkCudaErrors(cudaGraphicsGLRegisterBuffer(&VertexVBORes, VertexVBOID, cudaGraphicsRegisterFlagsNone));
 
@@ -1272,7 +1318,12 @@ public:
         float* vboPtr;
         size_t size;
         checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void**)&vboPtr, &size, VertexVBORes));
-        checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertices_data, size, cudaMemcpyHostToDevice));
+
+        if (vertex_data_on_cuda) {
+            checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertex_data, size, cudaMemcpyDeviceToDevice));
+        } else {
+            checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertex_data, size, cudaMemcpyHostToDevice));
+        }
 
         checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
         checkCudaErrors(cudaStreamSynchronize(0));
@@ -1287,32 +1338,25 @@ public:
 
         this->n_vertices = n_vertices;
         this->n_faces = n_faces;
+        this->vertex_data_on_cuda = vertex_data_on_cuda;
         initialized = true;
     }
 
-    void Update(OpenGL::Vertex* vertices_data, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool dynamic_vertex_buffer=false)
+    void Update(OpenGL::Vertex* vertex_data, unsigned int n_vertices, bool vertex_data_on_cuda=false)
     {
-        if (!initialized)
-        {
-            Init(vertices_data, n_vertices, indices, n_faces, dynamic_vertex_buffer);
+        checkCudaErrors(cudaGraphicsMapResources(1, &VertexVBORes));
+        float* vboPtr;
+        size_t size;
+        checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void**)&vboPtr, &size, VertexVBORes));
+         
+        if (vertex_data_on_cuda) {
+            checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertex_data, size, cudaMemcpyDeviceToDevice));
+        } else {
+            checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertex_data, size, cudaMemcpyHostToDevice));
         }
-        else
-        {
-            if (this->n_vertices != n_vertices || this->n_faces != n_faces)
-            {
-                std::cout << "ERROR: Different amount of vertices or faces in subsequent call" << std::endl;
-                return;
-            }
 
-            checkCudaErrors(cudaGraphicsMapResources(1, &VertexVBORes));
-            float* vboPtr;
-            size_t size;
-            checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void**)&vboPtr, &size, VertexVBORes));
-            checkCudaErrors(cudaMemcpy((void*)vboPtr, (void*)vertices_data, size, cudaMemcpyHostToDevice));
-
-            checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
-            checkCudaErrors(cudaStreamSynchronize(0));
-        }
+        checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
+        checkCudaErrors(cudaStreamSynchronize(0));
     }
 
     int Render(GLint position_loc, GLint normal_loc, GLint color_loc, GLint uv_loc, GLint mask_loc)
@@ -1401,6 +1445,26 @@ public:
         return extend;
     }
 
+    const unsigned int GetNumberOfVertices() const
+    {
+        return n_vertices;
+    }
+
+    const unsigned int GetNumberOfFaces() const
+    {
+        return n_faces;
+    }
+
+    const bool IsInitialized() const
+    {
+        return initialized;
+    }        
+    
+    const bool IsVertexDataOnCUDA() const
+    {
+        return vertex_data_on_cuda;
+    }
+
 private:
     GLuint vao;
     GLuint VertexVBOID, IndexVBOID;
@@ -1410,6 +1474,7 @@ private:
     unsigned int n_vertices;
     unsigned int n_faces;
 
+    bool vertex_data_on_cuda;
     bool verbose;
     bool initialized;
 
