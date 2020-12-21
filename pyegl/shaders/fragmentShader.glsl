@@ -29,7 +29,6 @@ void  main()
     frag_color = fragData.color;
     frag_position = vec4(fragData.position.xyz, 1.0);
     frag_normal = vec4(fragData.normal.xyz, 1.0);
-    frag_normal.z *= -1.0f; // for visualization
     frag_uv = fragData.uv;
     frag_bary = vec4(fragData.baryCoord, 1.0);
     frag_vertexIds = vec4(fragData.vertexIds, 1.0);

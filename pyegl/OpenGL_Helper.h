@@ -194,7 +194,7 @@ public:
             EGLint device_id = std::atoi(std::getenv("EGL_DEVICE_ID"));
             if (device_id)
             {
-                egl_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevs[2], 0);
+                egl_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevs[device_id], 0);
                 checkEglError("Error getting Platform Display: eglGetPlatformDisplayEXT");
             }
             else
@@ -1056,6 +1056,16 @@ struct Transformations
     };
   }
 
+  void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+  {      
+      projection = {
+          2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / (width - 1.0), 0.0,
+          0.0, 2.0 * fy / height, 2.0 * cy / (height - 1.0) - 1.0, 0.0,
+          0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
+          0.0, 0.0, -1.0, 0.0
+      };
+  }
+
   void SetMeshNormalization(Eigen::Vector3f cog, float scale)
   {
     mesh_normalization = {cog.x(), cog.y(), cog.z(), scale};
@@ -1325,7 +1335,7 @@ public:
         }
 
         checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
-        checkCudaErrors(cudaStreamSynchronize(0));
+        //checkCudaErrors(cudaStreamSynchronize(0));
 
         glGenBuffers(1, &IndexVBOID);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndexVBOID);
@@ -1355,7 +1365,7 @@ public:
         }
 
         checkCudaErrors(cudaGraphicsUnmapResources(1, &VertexVBORes));
-        checkCudaErrors(cudaStreamSynchronize(0));
+        //checkCudaErrors(cudaStreamSynchronize(0));
     }
 
     int Render(GLint position_loc, GLint normal_loc, GLint color_loc, GLint uv_loc, GLint mask_loc)

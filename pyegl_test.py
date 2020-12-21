@@ -20,7 +20,6 @@ intrinsics = [fx, fy, cx, cy, near, far]
 pose = [1., 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -10, 0, 0, 0, 1]
 width, height = 512, 512
 
-
 pyegl.init(width, height)
 maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
 
@@ -32,7 +31,7 @@ plt.imshow(maps[1].flip([0]).cpu().numpy()[..., 0:3])
 plt.figure(2)
 plt.imshow(maps[2].flip([0]).cpu().numpy()[..., 0:3])
 plt.figure(3)
-plt.imshow(torch.cat((maps[3].flip([0]), torch.zeros((width, height, 1), dtype=torch.float32).cuda()), dim=-1).cpu().numpy())
+plt.imshow(torch.cat((maps[3].flip([0]), torch.zeros((height, width, 1), dtype=torch.float32).cuda()), dim=-1).cpu().numpy())
 plt.figure(4)
 plt.imshow(maps[4].flip([0]).cpu().numpy())
 plt.figure(5)

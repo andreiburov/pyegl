@@ -134,7 +134,8 @@ void render(std::vector<float>& intrinsics)
 
   // set uniforms
   transformations.SetModelView(rigids[0]);
-  transformations.SetProjection(fovX, fovY, cX, cY, near, far);
+  //transformations.SetProjection(fovX, fovY, cX, cY, near, far);
+  transformations.SetPinholeProjection(fovX, fovY, cX, cY, near, far, g_width, g_height);
   transformations.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
   transformations.Use();
 
