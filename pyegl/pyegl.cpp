@@ -6,7 +6,7 @@
 #include <sstream>
 #include <fstream>
 #include <string>
-//#include <type_traits>
+#include <chrono>
 
 #include "OpenGL_Helper.h"
 #include "path.h"
@@ -140,8 +140,19 @@ void render(std::vector<float>& intrinsics)
   transformations.Use();
 
   // render mesh
+  //{
+  //auto start = std::chrono::system_clock::now();
   mesh.Render(position_loc, normal_loc, color_loc, uv_loc, mask_loc);
+  //auto elapsed = std::chrono::system_clock::now() - start;
+  //std::cout << "Rendering: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << "ms" << std::endl;
+  //}
+
+  //{
+  //auto start = std::chrono::system_clock::now();
   renderTarget.CopyRenderedTexturesToCUDA();
+  //auto elapsed = std::chrono::system_clock::now() - start;
+  //std::cout << "Copying OpenGL to CUDA: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << "ms" << std::endl;
+  //}
 
   //renderTarget.CopyRenderedTexturesToCUDA(true);
   //renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
@@ -152,12 +163,12 @@ void render(std::vector<float>& intrinsics)
   //renderTarget.WriteDataToFile("results/cuda_vids_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[5], 5);
 
   // write rendertarget to file
-  renderTarget.WriteToFile("results/fbo_color_" + std::to_string(frame_count) + ".png", 0);
-  renderTarget.WriteToFile("results/fbo_position_" + std::to_string(frame_count) + ".png", 1);
-  renderTarget.WriteToFile("results/fbo_normal_" + std::to_string(frame_count) + ".png", 2);
-  renderTarget.WriteToFile("results/fbo_uv_" + std::to_string(frame_count) + ".png", 3);
-  renderTarget.WriteToFile("results/fbo_bary_" + std::to_string(frame_count) + ".png", 4);
-  renderTarget.WriteToFile("results/fbo_vids_" + std::to_string(frame_count) + ".png", 5);
+  //renderTarget.WriteToFile("results/fbo_color_" + std::to_string(frame_count) + ".png", 0);
+  //renderTarget.WriteToFile("results/fbo_position_" + std::to_string(frame_count) + ".png", 1);
+  //renderTarget.WriteToFile("results/fbo_normal_" + std::to_string(frame_count) + ".png", 2);
+  //renderTarget.WriteToFile("results/fbo_uv_" + std::to_string(frame_count) + ".png", 3);
+  //renderTarget.WriteToFile("results/fbo_bary_" + std::to_string(frame_count) + ".png", 4);
+  //renderTarget.WriteToFile("results/fbo_vids_" + std::to_string(frame_count) + ".png", 5);
 
   // save screenshot
   // eglContext.SaveScreenshotPPM("results/rendering_" + std::to_string(frame_count) + ".ppm");
@@ -212,6 +223,8 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
     return {};
   }
 
+  //{
+  //auto start = std::chrono::system_clock::now();
   if (!mesh.IsInitialized())
   {
     mesh.Init((OpenGL::Vertex*)vertices.data_ptr(), n_vertices, map_indices(indices, n_faces).data(), n_faces, vertices.is_cuda());
@@ -228,6 +241,9 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
   {
     mesh.Update((OpenGL::Vertex*)vertices.data_ptr(), n_vertices, vertices.is_cuda());
   }
+  //auto elapsed = std::chrono::system_clock::now() - start;
+  //std::cout << "Copying Pytorch to OpenGL: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << "ms" << std::endl;
+  //}
   
   OpenGL::mat4 m{};
 
@@ -243,6 +259,7 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
 
   render(intrinsics);
 
+  //auto start = std::chrono::system_clock::now();
   auto device = vertices.device();
   auto color_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
   auto color_map = torch::from_blob(renderTarget.GetBuffers()[0], {g_height, g_width, 4}, color_options);
@@ -256,6 +273,8 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
   auto bary_map = torch::from_blob(renderTarget.GetBuffers()[4], {g_height, g_width, 4}, bary_options);
   auto vids_options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(device);
   auto vids_map = torch::from_blob(renderTarget.GetBuffers()[5], {g_height, g_width, 4}, vids_options);
+  //auto elapsed = std::chrono::system_clock::now() - start;
+  //std::cout << "Copying CUDA to Pytorch: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << "ms" << std::endl;
 
   return {color_map, position_map, normal_map, uv_map, bary_map, vids_map};
 }
