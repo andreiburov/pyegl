@@ -146,6 +146,14 @@ public:
     {
     }
 
+    EGLDisplay GetEGLDisplayFromNative(NativeDisplayType native_display=EGL_DEFAULT_DISPLAY)
+    {
+        std::cout << "Falling back to default display" << std::endl;
+        EGLDisplay eglDisplay = eglGetDisplay(native_display);
+        checkEglError("Failed to Get Display: eglGetDisplay");
+        std::cerr << "Failback to eglGetDisplay" << std::endl;
+        return eglDisplay;
+    }
 
     int Init(unsigned int width=512, unsigned int height=512)
     {        
@@ -158,49 +166,46 @@ public:
             EGL_NONE,
         };
 
+        // https://gist.github.com/andyneff/36293b1aeb509fd1c6313afabac777ee
         // 1. Initialize EGL
         {
-            PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT = (PFNEGLQUERYDEVICESEXTPROC) eglGetProcAddress(
-                    "eglQueryDevicesEXT");
-            checkEglError("Failed to get EGLEXT: eglQueryDevicesEXT");
-            PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC) eglGetProcAddress(
-                    "eglGetPlatformDisplayEXT");
-            checkEglError("Failed to get EGLEXT: eglGetPlatformDisplayEXT");
-            PFNEGLQUERYDEVICEATTRIBEXTPROC eglQueryDeviceAttribEXT = (PFNEGLQUERYDEVICEATTRIBEXTPROC) eglGetProcAddress(
-                    "eglQueryDeviceAttribEXT");
-            checkEglError("Failed to get EGLEXT: eglQueryDeviceAttribEXT");
-
-            EGLDeviceEXT *eglDevs;
-            EGLint numberDevices;
-
-            //Get number of devices
-            checkEglReturn(
-                    eglQueryDevicesEXT(0, NULL, &numberDevices),
-                    "Failed to get number of devices. Bad parameter suspected"
-            );
-            checkEglError("Error getting number of devices: eglQueryDevicesEXT");
-
-            std::cerr << numberDevices << " EGL devices found." << std::endl;
-
-            //Get devices
-            eglDevs = new EGLDeviceEXT[numberDevices];
-            checkEglReturn(
-                    eglQueryDevicesEXT(numberDevices, eglDevs, &numberDevices),
-                    "Failed to get devices. Bad parameter suspected"
-            );
-            checkEglError("Error getting number of devices: eglQueryDevicesEXT");
-
             std::cout << "EGL_DEVICE_ID environment variable is set to: " << std::getenv("EGL_DEVICE_ID") << std::endl;
             EGLint device_id = std::atoi(std::getenv("EGL_DEVICE_ID"));
-            if (device_id)
+
+            PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT = (PFNEGLQUERYDEVICESEXTPROC) eglGetProcAddress("eglQueryDevicesEXT");
+            checkEglError("Failed to get EGLEXT: eglQueryDevicesEXT");
+            PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC) eglGetProcAddress("eglGetPlatformDisplayEXT");
+            checkEglError("Failed to get EGLEXT: eglGetPlatformDisplayEXT");
+            PFNEGLQUERYDEVICEATTRIBEXTPROC eglQueryDeviceAttribEXT = (PFNEGLQUERYDEVICEATTRIBEXTPROC) eglGetProcAddress("eglQueryDeviceAttribEXT");
+            checkEglError("Failed to get EGLEXT: eglQueryDeviceAttribEXT");
+
+            if (device_id >= 0)
             {
-                egl_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevs[device_id], 0);
-                checkEglError("Error getting Platform Display: eglGetPlatformDisplayEXT");
+                EGLDeviceEXT *eglDevs;
+                EGLint numberDevices;
+
+                //Get number of devices
+                checkEglReturn(eglQueryDevicesEXT(0, NULL, &numberDevices), "Failed to get number of devices. Bad parameter suspected");
+                checkEglError("Error getting number of devices: eglQueryDevicesEXT");
+                std::cerr << numberDevices << " EGL devices found." << std::endl;
+
+                if (numberDevices > 0)
+                {
+                    eglDevs = new EGLDeviceEXT[numberDevices];
+                    checkEglReturn(eglQueryDevicesEXT(numberDevices, eglDevs, &numberDevices), "Failed to get devices. Bad parameter suspected");
+                    checkEglError("Error getting number of devices: eglQueryDevicesEXT");
+
+                    egl_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, eglDevs[device_id], 0);
+                    checkEglError("Error getting Platform Display: eglGetPlatformDisplayEXT");
+                }
+                else
+                {
+                    egl_display = GetEGLDisplayFromNative();
+                }
             }
             else
             {
-                egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-                checkEglError("Error getting Default Display: eglGetDisplay");
+                egl_display = GetEGLDisplayFromNative();
             }
 
             if (egl_display == EGL_NO_DISPLAY) std::cout << "NO EGL DISPLAY" << std::endl;
