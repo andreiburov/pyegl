@@ -192,7 +192,7 @@ std::vector<unsigned int> map_indices(const torch::Tensor& indices, unsigned int
 
 std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vector<float> pose, torch::Tensor vertices, unsigned int n_vertices, torch::Tensor indices, unsigned int n_faces)
 {
-  std::cout << "pyegl_forward" << std::endl;
+  //std::cout << "pyegl_forward" << std::endl;
   if (internal_state != InternalState::INITIALIZED)
   {
     std::cout << "ERROR: you need to initialize pyegl" << std::endl;
