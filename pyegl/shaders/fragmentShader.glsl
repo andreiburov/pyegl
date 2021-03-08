@@ -25,8 +25,14 @@ layout(location = 5) out vec4 frag_vertexIds;
 void  main()
 {
     if (fragData.mask < 0.5) discard;
-    
-    frag_color = fragData.color;
+
+    // phong shading    
+    vec3 light = normalize(vec3(0.0, 1.0, 1.0));
+    frag_color = fragData.color * (0.1 + max(dot(fragData.normal.xyz,light), 0.0));
+
+    // constant shading
+    // frag_color = fragData.color;
+
     frag_position = vec4(fragData.position.xyz, 1.0);
     frag_normal = vec4(fragData.normal.xyz, 1.0);
     frag_uv = fragData.uv;

@@ -344,7 +344,7 @@ public:
     void Clear()
     {
         glViewport(0 , 0 , GetWidth() , GetHeight());
-        glClearColor( 1.0 , 0.0 , 0.0 , 1.);
+        glClearColor(0.0 , 0.0 , 0.0 , 1.);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
@@ -1061,11 +1061,21 @@ struct Transformations
     };
   }
 
+//  void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+//  {
+//      projection = {
+//          2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / (width - 1.0), 0.0,
+//          0.0, 2.0 * fy / height, 2.0 * cy / (height - 1.0) - 1.0, 0.0,
+//          0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
+//          0.0, 0.0, -1.0, 0.0
+//      };
+//  }
+
   void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
-  {      
+  {
       projection = {
-          2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / (width - 1.0), 0.0,
-          0.0, 2.0 * fy / height, 2.0 * cy / (height - 1.0) - 1.0, 0.0,
+          2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / (width), 0.0,
+          0.0, 2.0 * fy / height, 2.0 * cy / (height) - 1.0, 0.0,
           0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
           0.0, 0.0, -1.0, 0.0
       };

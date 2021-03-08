@@ -38,5 +38,4 @@ plt.figure(5)
 plt.imshow((maps[5].flip([0])[..., 0:3]/maps[5].max()).cpu().numpy())
 plt.show()
 
-maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
 pyegl.terminate()
