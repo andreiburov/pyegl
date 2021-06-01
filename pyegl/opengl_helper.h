@@ -19,14 +19,16 @@
 
 #include "eigen/Eigen/Eigen"
 #ifndef NO_FREEIMAGE
-#include "FreeImageHelper.h"
+#include "deps/FreeImageHelper.h"
 #endif
 
 #define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
+#include "deps/tiny_obj_loader.h"
 #include <unordered_map>
 #include <functional>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "deps/stb_image.h"
 
 ////////////////////////////////
 ////   OPENGL / EGL / GLEW  ////
@@ -40,7 +42,7 @@
 ///////       CUDA      ////////
 ////////////////////////////////
 #include <cuda_gl_interop.h>
-#include "helper_cuda.h"
+#include "cuda_helper.h"
 
 
 ////////////////////////////////
@@ -48,7 +50,6 @@
 ////////////////////////////////
 
 #define V_RETURN(x) { if(x<0) {std::cout << std::endl << "[" << __FUNCTION__ << "] [" << __LINE__ << "] FAILED!" << std::endl; return -1;} }
-//#define V_RETURN(x)    { hr = (x); if( FAILED(hr) ) { _com_error err(hr); LPCTSTR errMsg = err.ErrorMessage(); std::cout << std::endl << "[" << __FUNCTION__ << "] [" << __LINE__ << "] FAILED!" << std::endl; return hr; } }
 
 #ifndef SAFE_DELETE
 #define SAFE_DELETE(ptr) {if(ptr!=nullptr) {delete ptr; ptr = nullptr;}}
@@ -176,8 +177,8 @@ public:
             checkEglError("Failed to get EGLEXT: eglQueryDevicesEXT");
             PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC) eglGetProcAddress("eglGetPlatformDisplayEXT");
             checkEglError("Failed to get EGLEXT: eglGetPlatformDisplayEXT");
-            PFNEGLQUERYDEVICEATTRIBEXTPROC eglQueryDeviceAttribEXT = (PFNEGLQUERYDEVICEATTRIBEXTPROC) eglGetProcAddress("eglQueryDeviceAttribEXT");
-            checkEglError("Failed to get EGLEXT: eglQueryDeviceAttribEXT");
+            //PFNEGLQUERYDEVICEATTRIBEXTPROC eglQueryDeviceAttribEXT = (PFNEGLQUERYDEVICEATTRIBEXTPROC) eglGetProcAddress("eglQueryDeviceAttribEXT");
+            //checkEglError("Failed to get EGLEXT: eglQueryDeviceAttribEXT");
 
             if (device_id >= 0)
             {
@@ -361,7 +362,7 @@ public:
         GLubyte* pixels = new GLubyte[3*pbufferWidth*pbufferHeight];
         glReadPixels(0, 0, pbufferWidth, pbufferHeight, GL_RGB, GL_UNSIGNED_BYTE, (void*)pixels);
   
-        size_t i, j, cur;
+        int i, j, cur;
         const size_t format_nchannels = 3;
         FILE *f = fopen(filename.c_str(), "w");
         fprintf(f, "P3\n%d %d\n%d\n", pbufferWidth, pbufferHeight, 255);
@@ -395,6 +396,77 @@ private:
     // window settings
     int pbufferWidth;
     int pbufferHeight;
+};
+
+
+class Texture
+{
+public:
+
+    enum InternalState 
+    {
+      UNINITIALIZED,
+      INITIALIZED
+    };
+
+    void Init(const char* filename)
+    {
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        int width, height, n_channels;
+        // flip the y-axis
+        stbi_set_flip_vertically_on_load(true); 
+        unsigned char* data = stbi_load(filename, &width, &height, &n_channels, 0);
+        if (data) 
+        {
+            std::cout << " " << "Loaded image from: " << filename << std::endl;
+            std::cout << " " << "Width: " << width << std::endl;
+            std::cout << " " << "Height: " << height << std::endl;
+            std::cout << " " << "# Channels: " << n_channels << std::endl;
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        }
+        else
+        {
+            std::cout << "Failed to load texture from " << filename << std::endl;
+        }
+
+        stbi_image_free(data);
+
+        state = InternalState::INITIALIZED;
+    }
+
+    void Terminate()
+    {
+        if (state == InternalState::INITIALIZED)
+        {
+            state = InternalState::UNINITIALIZED;
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glDeleteTextures(1, &texture);
+        }
+    }
+
+    void SetUniformLocations(GLint _texture_loc)
+    {
+        texture_loc = _texture_loc;
+    }
+
+    void Use()
+    {
+        if (state == InternalState::INITIALIZED)
+        {
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glUniform1i(texture_loc, 0);
+        }
+    }
+
+private:
+
+    unsigned int texture;
+    GLint texture_loc;
+    InternalState state = InternalState::UNINITIALIZED;
 };
 
 
@@ -497,13 +569,6 @@ public:
         cudaMalloc((void**)&(buffer[4]), width*height*4*sizeof(float));
         cudaMalloc((void**)&(buffer[5]), width*height*4*sizeof(float));
 
-        //buffer[0] = (float*)malloc(width*height*4*sizeof(float));
-        //buffer[1] = (float*)malloc(width*height*4*sizeof(float));
-        //buffer[2] = (float*)malloc(width*height*4*sizeof(float));
-        //buffer[3] = (float*)malloc(width*height*2*sizeof(float));
-        //buffer[4] = (float*)malloc(width*height*4*sizeof(float));
-        //buffer[5] = (float*)malloc(width*height*4*sizeof(float));
-
         return 1;
     }
 
@@ -513,7 +578,6 @@ public:
         {
             cudaGraphicsUnregisterResource(graphics_resource[i]);
             cudaFree(buffer[i]);
-            //free(buffer[i]);
         }
     }
 
@@ -771,16 +835,27 @@ public:
         return print_shader_info_log();
     }
 
-    int LoadShaderFromFile(const std::string& filename, GLenum type)
+    int LoadShaderFromFile(const std::string& filename, GLenum type, const std::vector<std::string>& defines)
     {
         std::ifstream shader_file(filename);
+
         if(!shader_file.is_open())
         {
             std::cout << "ERROR: unable to open shader file: " << filename << std::endl;
             return 0;
         }
+
         std::string shader_src((std::istreambuf_iterator<char>(shader_file)), std::istreambuf_iterator<char>());
         shader_file.close();
+
+        std::size_t second_line = shader_src.find(std::string("\n")) + 1;
+
+        for (const auto& define : defines)
+        {
+            shader_src.insert(second_line, std::string("#define ").append(define).append("\n"));
+        }
+
+        //std::cout << shader_src << std::endl;
 
         return LoadShader(shader_src.c_str(), type);
     }
@@ -799,20 +874,19 @@ private:
         CheckError();
         //std::cout << "GL_INFO_LOG_LENGTH:" << length << std::endl;
 
-        if ( length )
+        if (length)
         {
             char* buffer  =  new char [ length ];
-            GLint  l;
-            glGetShaderInfoLog ( shader , length , NULL , buffer );
+            glGetShaderInfoLog (shader, length, NULL, buffer);
             std::cout << "glGetShaderInfoLog:\n" <<  buffer << std::endl;
 
             delete [] buffer;
         
             // compile status
             GLint success;    
-            glGetShaderiv( shader, GL_COMPILE_STATUS, &success );
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
             CheckError();
-            if ( success != GL_TRUE )
+            if (success != GL_TRUE)
             {
                 std::cout << "ERROR: shader compilation failed" << std::endl;
                 return 0;
@@ -927,15 +1001,15 @@ public:
         return 1;
     }
 
-    int Init(const std::string& filename_vertexShader, const std::string& filename_fragmentShader)
+    int Init(const std::string& filename_vertexShader, const std::string& filename_fragmentShader, const std::vector<std::string>& defines)
     {
         OpenGL::Shader vertexShader, fragmentShader;
-        if(!vertexShader.LoadShaderFromFile(filename_vertexShader, GL_VERTEX_SHADER))
+        if(!vertexShader.LoadShaderFromFile(filename_vertexShader, GL_VERTEX_SHADER, defines))
         {
             std::cout << "ERROR: loading vertex shader failed" << std::endl;
             return -1;
         }
-        if(!fragmentShader.LoadShaderFromFile(filename_fragmentShader, GL_FRAGMENT_SHADER))
+        if(!fragmentShader.LoadShaderFromFile(filename_fragmentShader, GL_FRAGMENT_SHADER, defines))
         {
             std::cout << "ERROR: loading fragment shader failed" << std::endl;
             return -1;
@@ -943,20 +1017,20 @@ public:
         return Init(vertexShader, fragmentShader);
     }
 
-    int Init(const std::string& filename_vertexShader, const std::string& filename_geometryShader, const std::string& filename_fragmentShader)
+    int Init(const std::string& filename_vertexShader, const std::string& filename_geometryShader, const std::string& filename_fragmentShader, const std::vector<std::string>& defines)
     {
         OpenGL::Shader vertexShader, geometryShader, fragmentShader;
-        if(!vertexShader.LoadShaderFromFile(filename_vertexShader, GL_VERTEX_SHADER))
+        if(!vertexShader.LoadShaderFromFile(filename_vertexShader, GL_VERTEX_SHADER, defines))
         {
             std::cout << "ERROR: loading vertex shader failed" << std::endl;
             return -1;
         }
-        if(!geometryShader.LoadShaderFromFile(filename_geometryShader, GL_GEOMETRY_SHADER))
+        if(!geometryShader.LoadShaderFromFile(filename_geometryShader, GL_GEOMETRY_SHADER, defines))
         {
             std::cout << "ERROR: loading geometry shader failed" << std::endl;
             return -1;
         }
-        if(!fragmentShader.LoadShaderFromFile(filename_fragmentShader, GL_FRAGMENT_SHADER))
+        if(!fragmentShader.LoadShaderFromFile(filename_fragmentShader, GL_FRAGMENT_SHADER, defines))
         {
             std::cout << "ERROR: loading fragment shader failed" << std::endl;
             return -1;
@@ -964,10 +1038,10 @@ public:
         return Init(vertexShader, geometryShader, fragmentShader);
     }
 
-    int Init(const std::string& filename_computeShader)
+    int Init(const std::string& filename_computeShader, const std::vector<std::string>& defines)
     {
         OpenGL::Shader computeShader;
-        if(!computeShader.LoadShaderFromFile(filename_computeShader, GL_COMPUTE_SHADER))
+        if(!computeShader.LoadShaderFromFile(filename_computeShader, GL_COMPUTE_SHADER, defines))
         {
             std::cout << "ERROR: loading compute shader failed" << std::endl;
             return -1;
@@ -985,7 +1059,7 @@ public:
         GLint loc = glGetUniformLocation(shaderProgram, name.c_str());
         if (loc < 0)
         {
-            std::cerr << "Unable to get uniform location: " << name << "\t";
+            std::cerr << " " << "Unable to get uniform location: " << name << "\t";
             std::cerr << "(Maybe unused in shader program?)" << std::endl;
         }
         return loc;
@@ -996,7 +1070,7 @@ public:
         GLint loc = glGetAttribLocation(shaderProgram, name.c_str());
         if (loc < 0)
         {
-            std::cerr << "Unable to get attribute location: " << name << "\t";
+            std::cerr << " " << "Unable to get attribute location: " << name << "\t";
             std::cerr << "(Maybe unused in shader program?)" << std::endl;
         }
         return loc;
@@ -1054,28 +1128,18 @@ struct Transformations
   void SetProjection(float fovX, float fovY, float cX, float cY, float near, float far)
   {
     projection = {
-        2.0f * fovX, 0.0, cX-0.5f, 0.0, 
-        0.0, 2.0f * fovY, cY-0.5f, 0.0, 
-        0.0, 0.0, 1.0f/(far-near), -near / (far-near), // linear depth
+        2.0f * fovX, 0.0, cX - 0.5f, 0.0, 
+        0.0, 2.0f * fovY, cY - 0.5f, 0.0, 
+        0.0, 0.0, 1.0f / (far-near), -near / (far-near), // linear depth
         0.0, 0.0, 1.0, 0.0
     };
   }
 
-//  void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
-//  {
-//      projection = {
-//          2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / (width - 1.0), 0.0,
-//          0.0, 2.0 * fy / height, 2.0 * cy / (height - 1.0) - 1.0, 0.0,
-//          0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
-//          0.0, 0.0, -1.0, 0.0
-//      };
-//  }
-
   void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
   {
       projection = {
-          2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / (width), 0.0,
-          0.0, 2.0 * fy / height, 2.0 * cy / (height) - 1.0, 0.0,
+          -2.0 * fx / width, 0.0, 1.0 - 2.0 * cx / width, 0.0,
+          0.0, 2.0 * fy / height, 2.0 * cy / height - 1.0, 0.0,
           0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
           0.0, 0.0, -1.0, 0.0
       };
@@ -1331,7 +1395,7 @@ public:
 
     void Init(OpenGL::Vertex* vertex_data, unsigned int n_vertices, unsigned int* indices, unsigned int n_faces, bool vertex_data_on_cuda=false)
     {
-        std::cout << "initialize mesh (" << n_vertices << " | " << n_faces << ")" << std::endl;
+        std::cout << "Initialize mesh (" << n_vertices << " | " << n_faces << ")" << std::endl;
 
         glGenBuffers(1, &VertexVBOID);
         glBindBuffer(GL_ARRAY_BUFFER, VertexVBOID);
@@ -1451,7 +1515,7 @@ public:
         // glDrawRangeElements(GL_TRIANGLES, 0, 3, 3, GL_UNSIGNED_SHORT, BUFFER_OFFSET(0));    //The starting point of the IBO
         // glDrawRangeElements may or may not give a performance advantage over glDrawElements
 
-        return 1;
+        return 0;
     }
 
     GLuint GetVertexBufferID()
@@ -1528,12 +1592,7 @@ void ProgressBar(std::string titel, float progress)
 }; // namespace opengl
 
 
-
-
 // eigen helper
-
-
-
 template<typename T,unsigned int n,unsigned m>
 std::istream &operator>>(std::istream &in, Eigen::Matrix<T,n,m> &other)
 {

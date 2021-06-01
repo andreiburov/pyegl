@@ -6,9 +6,9 @@
 #include <fstream>
 #include <streambuf>
 
-#include "OpenGL_Helper.h"
+#include "opengl_helper.h"
 #include <cuda_gl_interop.h>
-#include "helper_cuda.h"
+#include "cuda_helper.h"
 
 
 using namespace std;
@@ -29,14 +29,10 @@ unsigned int height = 512;
 
 
 OpenGL::Mesh mesh;
-
 OpenGL::RenderTarget renderTarget;
-
 OpenGL::ShaderProgram shaderProgram;
-GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc; // attribute location
-
+GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc;
 std::vector<OpenGL::mat4> rigids;
-
 OpenGL::Transformations transformations;
 
 
@@ -112,8 +108,7 @@ static int opengl()  {
     glDepthRangef(near, far);
 
     // init shader program
-    if(!shaderProgram.Init("../shaders/vertexShader.glsl", "../shaders/geometryShader.glsl", "../shaders/fragmentShader.glsl"))
-        //if(!shaderProgram.Init("vertexShader.glsl", "fragmentShader.glsl"))
+    if(!shaderProgram.Init("../shaders/basic.vs", "../shaders/basic.gs", "../shaders/basic.fs"))
     {
         std::cout << "ERROR: initializing shader program failed" << std::endl;
         return -1;
