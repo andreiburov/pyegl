@@ -40,12 +40,12 @@ void main()
 
 #ifdef PER_FACE_NORMAL
     vec3 normal;
-    normal = cross(inData[1].position - inData[0].position, inData[2].position - inData[0].position);
+    normal = cross(inData[1].position - inData[1].position, inData[2].position - inData[0].position);
     normal = normalize(normal);
 #endif
 
     int i;
-    for(i = 0;i < gl_in.length();i++)
+    for (i = 0; i < gl_in.length(); i++)
     {      
       fragData.position = inData[i].position;
       #ifdef PER_FACE_NORMAL
@@ -64,14 +64,3 @@ void main()
 
     EndPrimitive();
 }
-
-
-/*
-https://www.khronos.org/opengl/wiki/Geometry_Shader
-
-- There are some GS input values that are based on primitives, not vertices. These are not aggregated into arrays. These are:
-
-in int gl_PrimitiveIDIn;
-in int gl_InvocationID; // Requires GLSL 4.0 or ARB_gpu_shader5
-
-*/

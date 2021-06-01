@@ -25,9 +25,9 @@ width, height = 512, 512
 
 
 #pyegl.init(width, height, ['CONSTANT_SHADING'])
-pyegl.init(width, height, ['PHONG_SHADING'])
-#pyegl.init(width, height, ['TEXTURE_SHADING'])
-#pyegl.attach_texture('data/bunny-atlas.jpg')
+#pyegl.init(width, height, ['PHONG_SHADING'])
+pyegl.init(width, height, ['TEXTURE_SHADING'])
+pyegl.attach_texture('data/bunny-atlas.jpg')
 maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
 
 color = maps[0].flip([0]).cpu()
