@@ -57,7 +57,7 @@ static unsigned int g_width = 512;
 static unsigned int g_height = 512;
 
 
-void pyegl_init(unsigned int width, unsigned int height, std::vector<std::string> defines)
+void pyegl_init_with_defines(unsigned int width, unsigned int height, std::vector<std::string> defines)
 {
   g_width = width;
   g_height = height;
@@ -93,6 +93,12 @@ void pyegl_init(unsigned int width, unsigned int height, std::vector<std::string
   renderTarget.Init(eglContext.GetWidth(), eglContext.GetHeight());
 
   internal_state = InternalState::INITIALIZED;
+}
+
+
+void pyegl_init(unsigned int width, unsigned int height)
+{
+  pyegl_init_with_defines(width, height, {"PHONG_SHADING"});
 }
 
 
@@ -306,6 +312,7 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
   m.def("init", &pyegl_init, "Set up EGL context");
+  m.def("init_with_defines", &pyegl_init_with_defines, "Set up EGL context with defines");
   m.def("terminate", &pyegl_terminate, "Destroy EGL context");
   m.def("attach_texture", &pyegl_attach_texture, "Load texture from file and attach to context");
   m.def("forward", &pyegl_forward, "Forward through pyegl");

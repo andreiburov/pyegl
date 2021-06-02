@@ -4,7 +4,7 @@ import pyegl
 import trimesh
 import imageio
 
-mesh = trimesh.load('data/bunny.obj', process=False)
+mesh = trimesh.load('data/bunny_col.obj', process=False)
 mesh.apply_translation(-mesh.centroid).apply_scale(1./mesh.extents)
 n_vertices = mesh.vertices.shape[0]
 n_faces = mesh.faces.shape[0]
@@ -24,9 +24,10 @@ pose = [1., 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 3, 0, 0, 0, 1]
 width, height = 512, 512
 
 
-#pyegl.init(width, height, ['CONSTANT_SHADING'])
-#pyegl.init(width, height, ['PHONG_SHADING'])
-pyegl.init(width, height, ['TEXTURE_SHADING'])
+#pyegl.init(width, height)
+#pyegl.init_with_defines(width, height, ['CONSTANT_SHADING'])
+#pyegl.init_with_defines(width, height, ['PHONG_SHADING'])
+pyegl.init_with_defines(width, height, ['TEXTURE_SHADING'])
 pyegl.attach_texture('data/bunny-atlas.jpg')
 maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
 
