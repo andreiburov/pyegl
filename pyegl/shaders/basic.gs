@@ -40,7 +40,7 @@ void main()
 
 #ifdef PER_FACE_NORMAL
     vec3 normal;
-    normal = cross(inData[1].position - inData[1].position, inData[2].position - inData[0].position);
+    normal = cross(inData[1].position - inData[0].position, inData[2].position - inData[0].position);
     normal = normalize(normal);
 #endif
 
