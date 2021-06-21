@@ -1135,17 +1135,35 @@ struct Transformations
     };
   }
 
-  // the correctives for cx, cy are applied since the rasterizer samples in the center of the pixel
-  // we need the rasterized values to map back to the pixel location
+  //void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+  //{
+  //    projection = {
+  //        2.0 * (fx) / width, 0.0, 2.0 * (cx) / width - 1.0, 0.0,
+  //        0.0, 2.0 * (fy) / height, 2.0 * (cy) / height - 1.0, 0.0,
+  //        0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
+  //        0.0, 0.0, -1.0, 0.0
+  //    };
+  //}
+
   void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
   {
       projection = {
-          2.0 * (fx) / width, 0.0, 1.0 - 2.0 * (cx - 0.5) / (width - 1), 0.0,
-          0.0, 2.0 * (fy) / height, 2.0 * (cy + 0.5) / (height - 1) - 1.0, 0.0,
+          2.0 * (fx) / width, 0.0, 0.0, 0.0,
+          0.0, 2.0 * (fy) / height, 0.0, 0.0,
           0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
           0.0, 0.0, -1.0, 0.0
       };
   }
+
+  //void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+  //{
+  //    projection = {
+  //        1.0, 0.0, 0.0, 0.0,
+  //        0.0, 1.0, 0.0, 0.0,
+  //        0.0, 0.0, 1.0, 0.0,
+  //        0.0, 0.0, 0.0, 1.0
+  //    };
+  //}
 
   void SetMeshNormalization(Eigen::Vector3f cog, float scale)
   {

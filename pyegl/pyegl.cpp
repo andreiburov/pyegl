@@ -158,13 +158,13 @@ void render(std::vector<float>& intrinsics)
   transformations.SetModelView(rigids[0]);
   transformations.SetPinholeProjection(fovX, fovY, cX, cY, near, far, g_width, g_height);
 
-  #ifdef DEBUG
-  std::cout << "Pinhole camera:" << std::endl;
-  std::cout << " " << transformations.projection.m00 << " " << transformations.projection.m01 << " " << transformations.projection.m02 << " " << transformations.projection.m03 << std::endl;
-  std::cout << " " << transformations.projection.m10 << " " << transformations.projection.m11 << " " << transformations.projection.m12 << " " << transformations.projection.m13 << std::endl;
-  std::cout << " " << transformations.projection.m20 << " " << transformations.projection.m21 << " " << transformations.projection.m22 << " " << transformations.projection.m23 << std::endl;
-  std::cout << " " << transformations.projection.m30 << " " << transformations.projection.m31 << " " << transformations.projection.m32 << " " << transformations.projection.m33 << std::endl;
-  #endif
+  //#ifdef DEBUG
+  //std::cout << "Pinhole camera:" << std::endl;
+  //std::cout << " " << transformations.projection.m00 << " " << transformations.projection.m01 << " " << transformations.projection.m02 << " " << transformations.projection.m03 << std::endl;
+  //std::cout << " " << transformations.projection.m10 << " " << transformations.projection.m11 << " " << transformations.projection.m12 << " " << transformations.projection.m13 << std::endl;
+  //std::cout << " " << transformations.projection.m20 << " " << transformations.projection.m21 << " " << transformations.projection.m22 << " " << transformations.projection.m23 << std::endl;
+  //std::cout << " " << transformations.projection.m30 << " " << transformations.projection.m31 << " " << transformations.projection.m32 << " " << transformations.projection.m33 << std::endl;
+  //#endif
 
   transformations.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
 
