@@ -1,8 +1,10 @@
 #include <torch/extension.h>
 
 #include <vector>
+#include <map>
 #include <cassert>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <fstream>
 #include <string>
@@ -48,11 +50,15 @@ static OpenGL::EGL eglContext;
 static OpenGL::RenderTarget renderTarget;
 static OpenGL::ShaderProgram shaderProgram;
 static OpenGL::Texture texture;
-static OpenGL::Mesh mesh;
+//static OpenGL::Mesh mesh;
+static std::vector<OpenGL::Mesh> meshes;
+static std::map<long, int> meshes_cache;
+static int g_active_mesh_index = -1;
+static int CACHE_SIZE = 20;
 static GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc;
 static OpenGL::Transformations transformations;
 static std::vector<OpenGL::mat4> rigids;
-static unsigned int frame_count = 0;
+static unsigned int g_frame_count = 0;
 static unsigned int g_width = 512;
 static unsigned int g_height = 512;
 
@@ -105,7 +111,9 @@ void pyegl_init(unsigned int width, unsigned int height)
 void pyegl_terminate()
 {
   internal_state = InternalState::UNINITIALIZED;
-  mesh.Terminate();
+  //mesh.Terminate();
+  for (auto& mesh : meshes)
+    mesh.Terminate();
   texture.Terminate();
   renderTarget.Terminate();
   eglContext.Terminate();
@@ -166,6 +174,7 @@ void render(std::vector<float>& intrinsics)
   //std::cout << " " << transformations.projection.m30 << " " << transformations.projection.m31 << " " << transformations.projection.m32 << " " << transformations.projection.m33 << std::endl;
   //#endif
 
+  auto& mesh = meshes[g_active_mesh_index];
   transformations.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
 
   #ifdef DEBUG
@@ -189,26 +198,26 @@ void render(std::vector<float>& intrinsics)
 
   #ifdef DEBUG
   renderTarget.CopyRenderedTexturesToCUDA(true);
-  //renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
-  //renderTarget.WriteDataToFile("results/cuda_position_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[1], 1);
-  //renderTarget.WriteDataToFile("results/cuda_normal_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[2], 2);
-  //renderTarget.WriteDataToFile("results/cuda_uv_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[3], 3);
-  //renderTarget.WriteDataToFile("results/cuda_bary_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[4], 4);
-  //renderTarget.WriteDataToFile("results/cuda_vids_" + std::to_string(frame_count) + ".png", renderTarget.GetBuffers()[5], 5);
+  //renderTarget.WriteDataToFile("results/cuda_color_" + std::to_string(g_frame_count) + ".png", renderTarget.GetBuffers()[0], 0);
+  //renderTarget.WriteDataToFile("results/cuda_position_" + std::to_string(g_frame_count) + ".png", renderTarget.GetBuffers()[1], 1);
+  //renderTarget.WriteDataToFile("results/cuda_normal_" + std::to_string(g_frame_count) + ".png", renderTarget.GetBuffers()[2], 2);
+  //renderTarget.WriteDataToFile("results/cuda_uv_" + std::to_string(g_frame_count) + ".png", renderTarget.GetBuffers()[3], 3);
+  //renderTarget.WriteDataToFile("results/cuda_bary_" + std::to_string(g_frame_count) + ".png", renderTarget.GetBuffers()[4], 4);
+  //renderTarget.WriteDataToFile("results/cuda_vids_" + std::to_string(g_frame_count) + ".png", renderTarget.GetBuffers()[5], 5);
 
   // write rendertarget to file
-  renderTarget.WriteToFile("fbo_color_" + std::to_string(frame_count) + ".png", 0);
-  renderTarget.WriteToFile("fbo_position_" + std::to_string(frame_count) + ".png", 1);
-  renderTarget.WriteToFile("fbo_normal_" + std::to_string(frame_count) + ".png", 2);
-  renderTarget.WriteToFile("fbo_uv_" + std::to_string(frame_count) + ".png", 3);
-  renderTarget.WriteToFile("fbo_bary_" + std::to_string(frame_count) + ".png", 4);
-  renderTarget.WriteToFile("fbo_vids_" + std::to_string(frame_count) + ".png", 5);
+  renderTarget.WriteToFile("fbo_color_" + std::to_string(g_frame_count) + ".png", 0);
+  renderTarget.WriteToFile("fbo_position_" + std::to_string(g_frame_count) + ".png", 1);
+  renderTarget.WriteToFile("fbo_normal_" + std::to_string(g_frame_count) + ".png", 2);
+  renderTarget.WriteToFile("fbo_uv_" + std::to_string(g_frame_count) + ".png", 3);
+  renderTarget.WriteToFile("fbo_bary_" + std::to_string(g_frame_count) + ".png", 4);
+  renderTarget.WriteToFile("fbo_vids_" + std::to_string(g_frame_count) + ".png", 5);
 
   // save screenshot
-  eglContext.SaveScreenshotPPM("rendering_" + std::to_string(frame_count) + ".ppm");
+  eglContext.SaveScreenshotPPM("rendering_" + std::to_string(g_frame_count) + ".ppm");
   #endif
 
-  frame_count++;
+  g_frame_count++;
 
   // flush and swap buffers
   eglContext.SwapBuffer();
@@ -258,6 +267,40 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
     return {};
   }
 
+  // Looking for a mesh in the cache or adding a new one
+  long ptr = (long)indices.data_ptr();
+  auto search = meshes_cache.find(ptr);
+  if (search != meshes_cache.end())
+  {
+    //std::cout << "[INFO] Found cached mesh (indices ptr 0x" << std::hex << ptr << std::dec << " )" << std::endl;
+    g_active_mesh_index = search->second;
+  }
+  else
+  {
+    if (meshes.size() > CACHE_SIZE)
+    {
+      meshes_cache.clear();
+      for (auto& m : meshes)
+        m.Terminate();
+      meshes.clear();
+    }
+
+#ifdef DEBUG
+    std::cout << "[INFO] Adding new mesh in the cache (indices ptr 0x" << std::hex << ptr << std::dec << " )" << std::endl;
+#endif
+    g_active_mesh_index = meshes.size();
+    meshes_cache[ptr] = g_active_mesh_index;
+
+#ifdef DEBUG
+    for (const auto & tuple : meshes_cache)
+      std::cout << "0x" << std::hex << tuple.first << std::dec << "->" << tuple.second << std::endl;
+#endif
+
+    meshes.push_back(OpenGL::Mesh());
+  }
+  
+  auto& mesh = meshes[g_active_mesh_index];
+
   CLOCK_START(time_pytorch_opengl_transfer);
   if (!mesh.IsInitialized())
   {
@@ -268,8 +311,7 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
     //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawElements.xhtml
     //type must be on of GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT, or GL_UNSIGNED_INT
     std::cout << "ERROR: Different amount of vertices or faces in subsequent call: (" << n_vertices << "|" << n_faces << ")" << std::endl;
-    mesh.Terminate();
-    mesh.Init((OpenGL::Vertex*)vertices.data_ptr(), n_vertices, map_indices(indices, n_faces).data(), n_faces, vertices.is_cuda());
+    return {};
   }
   else
   {
