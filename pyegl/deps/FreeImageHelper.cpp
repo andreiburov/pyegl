@@ -131,7 +131,7 @@ bool FreeImage::LoadImageFromFile(const std::string& filename, unsigned int widt
 	// flip
 	if (!flipY) // per default it is flipped, because of dx rendering
 	{
-		for (int y = 0; y < h; ++y)
+		for (unsigned int y = 0; y < h; ++y)
 		{
 			memcpy(&(data[y*nChannels * w]), &bits[sizeof(float) * (h - 1 - y) * nChannels * w], sizeof(float) * nChannels * w);
 		}

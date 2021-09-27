@@ -8,8 +8,8 @@ setup(
     author='Andrei Burov',
     ext_modules=[
         CUDAExtension('pyegl', [osp.join('pyegl', 'pyegl.cpp'), osp.join('pyegl', 'deps', 'FreeImageHelper.cpp')],
-                      include_dirs=['/rhome/aburov/.local/include'],
-                      library_dirs=['/rhome/aburov/.local/lib', '/rhome/aburov/.local/lib64'],
+                      include_dirs=[osp.join(osp.dirname(osp.realpath(__file__)), 'deps'), osp.join(osp.dirname(osp.realpath(__file__)), 'deps/glew-2.1.0/include')],
+                      library_dirs=[osp.join(osp.dirname(osp.realpath(__file__)), 'deps/glew-2.1.0/lib')],
                       libraries=['dl', 'freeimage', 'GL', 'EGL', 'GLESv2', 'GLEW'])
     ],
     data_files=[('shaders', [
