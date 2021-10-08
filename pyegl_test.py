@@ -24,10 +24,12 @@ pose = [1., 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 3, 0, 0, 0, 1]
 width, height = 512, 512
 
 
-pyegl.init(width, height)
+#pyegl.init(width, height)
 #pyegl.init_with_defines(width, height, ['CONSTANT_SHADING'])
-#pyegl.init_with_defines(width, height, ['PHONG_SHADING'])
-#pyegl.init_with_defines(width, height, ['TEXTURE_SHADING'])
+#pyegl.init_with_defines(width, height, ['DIFFUSE_SHADING'])
+pyegl.init_with_defines(width, height, ['TEXTURE_SHADING'])
+#pyegl.load_config('data/config.json')
+#pyegl.load_shader(['TEXTURE_SHADING', 'DIFFUSE_SHADING'])
 pyegl.attach_texture('data/bunny-atlas.jpg')
 maps = pyegl.forward(intrinsics, pose, vertices_data, n_vertices, faces, n_faces)
 

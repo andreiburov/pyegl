@@ -1065,6 +1065,19 @@ public:
         return loc;
     }
 
+    int SetUniform3fv(const std::string& name, const Eigen::Vector3f& value)
+    {
+        auto loc = GetUniformLocation(name);
+        glUniform3fv(loc, 1, value.data());
+        if (glGetError() != GL_NO_ERROR)
+        {
+            std::cout << "ERROR: setting a uniform " << name << std::endl;
+            return -1;
+        }
+
+        return 1;
+    }
+
     GLint GetAttribLocation(const std::string& name)
     {
         GLint loc = glGetAttribLocation(shaderProgram, name.c_str());
@@ -1084,122 +1097,121 @@ private:
 // shader transformations cpu -> gpu example
 struct Transformations
 {
-  OpenGL::mat4 projection;
-  OpenGL::mat4 modelview;
-  OpenGL::vec4 mesh_normalization;
-
-  // uniform location
-  GLint projection_loc;
-  GLint modelview_loc;
-  GLint mesh_normalization_loc;
-
-  Transformations()
-  {
-    Reset();
-    projection_loc = modelview_loc = mesh_normalization_loc = -1;
-  }
-
-  void Reset()
-  {
-    projection = OpenGL::mat4::Identity();
-    modelview = OpenGL::mat4::Identity();
-    mesh_normalization = OpenGL::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-  }
-
-  void SetUniformLocations(GLint _projection_loc, GLint _modelview_loc, GLint _mesh_normalization_loc)
-  {
-    projection_loc = _projection_loc;
-    modelview_loc = _modelview_loc;
-    mesh_normalization_loc = _mesh_normalization_loc;
-  }
-
-  void Use()
-  {
-    glUniformMatrix4fv(projection_loc, 1, true, projection.data);
-    glUniformMatrix4fv(modelview_loc, 1, true, modelview.data);
-    glUniform4fv(mesh_normalization_loc, 1, mesh_normalization.data);
-  }
-
-  void SetModelView(OpenGL::mat4& m)
-  {
-    modelview = m;
-  }
-
-  void SetProjection(float fovX, float fovY, float cX, float cY, float near, float far)
-  {
-    projection = {
-        2.0f * fovX, 0.0, cX - 0.5f, 0.0, 
-        0.0, 2.0f * fovY, cY - 0.5f, 0.0, 
-        0.0, 0.0, 1.0f / (far-near), -near / (far-near), // linear depth
-        0.0, 0.0, 1.0, 0.0
-    };
-  }
-
-  //void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
-  //{
-  //    projection = {
-  //        2.0 * (fx) / width, 0.0, 2.0 * (cx) / width - 1.0, 0.0,
-  //        0.0, 2.0 * (fy) / height, 2.0 * (cy) / height - 1.0, 0.0,
-  //        0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
-  //        0.0, 0.0, -1.0, 0.0
-  //    };
-  //}
-
-  void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
-  {
-      projection = {
-          2.0 * (fx) / width, 0.0, 0.0, 0.0,
-          0.0, 2.0 * (fy) / height, 0.0, 0.0,
-          0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
-          0.0, 0.0, -1.0, 0.0
-      };
-  }
-
-  //void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
-  //{
-  //    projection = {
-  //        1.0, 0.0, 0.0, 0.0,
-  //        0.0, 1.0, 0.0, 0.0,
-  //        0.0, 0.0, 1.0, 0.0,
-  //        0.0, 0.0, 0.0, 1.0
-  //    };
-  //}
-
-  void SetMeshNormalization(Eigen::Vector3f cog, float scale)
-  {
-    mesh_normalization = {cog.x(), cog.y(), cog.z(), scale};
-  }
-
-  float FovX() { return projection.m00; }
-  float FovY() { return projection.m11; }
-  float CenterX() { return projection.m02; }
-  float CenterY() { return projection.m12; }
-
-  // actual camera matrix
-  Eigen::Matrix4f MeshNormalization() {
-    float scale = mesh_normalization.w;
-    Eigen::Vector3f cog(mesh_normalization.x, mesh_normalization.y, mesh_normalization.z);
-    Eigen::Matrix4f denormalization;
-    denormalization <<  scale, 0.0f, 0.0f, cog.x(), 
-                        0.0f, scale, 0.0f, cog.y(), 
-                        0.0f, 0.0f, scale, cog.z(), 
-                        0.0f, 0.0f, 0.0f, 1.0f;
-    Eigen::Matrix4f normalization = denormalization.inverse();
-    return normalization;
-  }
-
-  Eigen::Matrix4f World2CameraSpace()
-  {
-    Eigen::Matrix4f camM = modelview.ToEigen(); // maps vertices (worldspace) to camera space
-    return camM;
-  }
-
-  Eigen::Matrix4f Camera2WorldSpace()
-  {
-    Eigen::Matrix4f camM_Inv = World2CameraSpace().inverse(); // maps from camera space to world space
-    return camM_Inv;
-  }
+    OpenGL::mat4 projection;
+    OpenGL::mat4 modelview;
+    OpenGL::vec4 mesh_normalization;
   
+    // uniform location
+    GLint projection_loc;
+    GLint modelview_loc;
+    GLint mesh_normalization_loc;
+  
+    Transformations()
+    {
+        Reset();
+        projection_loc = modelview_loc = mesh_normalization_loc = -1;
+    }
+  
+    void Reset()
+    {
+        projection = OpenGL::mat4::Identity();
+        modelview = OpenGL::mat4::Identity();
+        mesh_normalization = OpenGL::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+  
+    void SetUniformLocations(GLint _projection_loc, GLint _modelview_loc, GLint _mesh_normalization_loc)
+    {
+        projection_loc = _projection_loc;
+        modelview_loc = _modelview_loc;
+        mesh_normalization_loc = _mesh_normalization_loc;
+    }
+  
+    void Use()
+    {
+        glUniformMatrix4fv(projection_loc, 1, true, projection.data);
+        glUniformMatrix4fv(modelview_loc, 1, true, modelview.data);
+        glUniform4fv(mesh_normalization_loc, 1, mesh_normalization.data);
+    }
+  
+    void SetModelView(OpenGL::mat4& m)
+    {
+        modelview = m;
+    }
+  
+    void SetProjection(float fovX, float fovY, float cX, float cY, float near, float far)
+    {
+        projection = {
+            2.0f * fovX, 0.0, cX - 0.5f, 0.0, 
+            0.0, 2.0f * fovY, cY - 0.5f, 0.0, 
+            0.0, 0.0, 1.0f / (far-near), -near / (far-near), // linear depth
+            0.0, 0.0, 1.0, 0.0
+        };
+    }
+  
+    //void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+    //{
+    //    projection = {
+    //        2.0 * (fx) / width, 0.0, 2.0 * (cx) / width - 1.0, 0.0,
+    //        0.0, 2.0 * (fy) / height, 2.0 * (cy) / height - 1.0, 0.0,
+    //        0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
+    //        0.0, 0.0, -1.0, 0.0
+    //    };
+    //}
+  
+    void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+    {
+        projection = {
+            2.0 * (fx) / width, 0.0, 0.0, 0.0,
+            0.0, 2.0 * (fy) / height, 0.0, 0.0,
+            0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
+            0.0, 0.0, -1.0, 0.0
+        };
+    }
+  
+    //void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
+    //{
+    //    projection = {
+    //        1.0, 0.0, 0.0, 0.0,
+    //        0.0, 1.0, 0.0, 0.0,
+    //        0.0, 0.0, 1.0, 0.0,
+    //        0.0, 0.0, 0.0, 1.0
+    //    };
+    //}
+  
+    void SetMeshNormalization(Eigen::Vector3f cog, float scale)
+    {
+        mesh_normalization = {cog.x(), cog.y(), cog.z(), scale};
+    }
+  
+    float FovX() { return projection.m00; }
+    float FovY() { return projection.m11; }
+    float CenterX() { return projection.m02; }
+    float CenterY() { return projection.m12; }
+  
+    // actual camera matrix
+    Eigen::Matrix4f MeshNormalization() {
+        float scale = mesh_normalization.w;
+        Eigen::Vector3f cog(mesh_normalization.x, mesh_normalization.y, mesh_normalization.z);
+        Eigen::Matrix4f denormalization;
+        denormalization <<  scale, 0.0f, 0.0f, cog.x(), 
+                            0.0f, scale, 0.0f, cog.y(), 
+                            0.0f, 0.0f, scale, cog.z(), 
+                            0.0f, 0.0f, 0.0f, 1.0f;
+        Eigen::Matrix4f normalization = denormalization.inverse();
+        return normalization;
+    }
+  
+    Eigen::Matrix4f World2CameraSpace()
+    {
+        Eigen::Matrix4f camM = modelview.ToEigen(); // maps vertices (worldspace) to camera space
+        return camM;
+    }
+  
+    Eigen::Matrix4f Camera2WorldSpace()
+    {
+        Eigen::Matrix4f camM_Inv = World2CameraSpace().inverse(); // maps from camera space to world space
+        return camM_Inv;
+    }
 };
 
 struct Vertex
