@@ -54,7 +54,7 @@ void  main()
     frag_color += vec4(base_color * diffuse, 0.0);
     #endif
 
-    #if !defined(CONSTANT_SHADING) && ! defined(DIFFUSE_SHADING)
+    #if !defined(CONSTANT_SHADING) && !defined(DIFFUSE_SHADING)
     frag_color = vec4(base_color, 1.0);
     #endif
 

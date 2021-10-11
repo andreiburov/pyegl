@@ -595,6 +595,8 @@ public:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
     }
 
     void CopyRenderedTexturesToCUDA(bool copy_to_host=false)
@@ -1161,8 +1163,8 @@ struct Transformations
     void SetPinholeProjection(float fx, float fy, float cx, float cy, float near, float far, float width, float height)
     {
         projection = {
-            2.0 * (fx) / width, 0.0, 0.0, 0.0,
-            0.0, 2.0 * (fy) / height, 0.0, 0.0,
+            2.0f * (fx) / width, 0.0, 0.0, 0.0,
+            0.0, 2.0f * (fy) / height, 0.0, 0.0,
             0.0, 0.0, (far + near) / (near - far), (2 * far * near) / (near - far),
             0.0, 0.0, -1.0, 0.0
         };

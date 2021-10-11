@@ -258,6 +258,9 @@ static const char *_cudaGetErrorEnum(cudaError_t error)
 
         case cudaErrorApiFailureBase:
             return "cudaErrorApiFailureBase";
+
+        default:
+            return "Default";
     }
 
     return "<unknown>";

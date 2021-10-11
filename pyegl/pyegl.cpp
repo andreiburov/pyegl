@@ -13,6 +13,7 @@
 #include "opengl_helper.h"
 #include "deps/path.h"
 #include "deps/json.h"
+#include "deps/any.h"
 
 
 //#define DEBUG
@@ -20,7 +21,9 @@
 #define CLOCK_END(start, msg) std::cout << msg << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count() << "ms" << std::endl
 
 #ifndef DEBUG
+#undef CLOCK_START
 #define CLOCK_START(start) {}
+#undef CLOCK_END
 #define CLOCK_END(start, msg) {}
 #endif
 
@@ -55,20 +58,34 @@ static OpenGL::Texture texture;
 static std::vector<OpenGL::Mesh> meshes;
 static std::map<long, int> meshes_cache;
 static int g_active_mesh_index = -1;
-static int CACHE_SIZE = 20;
+static size_t CACHE_SIZE = 20;
 static GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc;
 static OpenGL::Transformations transformations;
 static std::vector<OpenGL::mat4> rigids;
 static unsigned int g_frame_count = 0;
 static unsigned int g_width = 512;
 static unsigned int g_height = 512;
-static Eigen::Vector3f g_ambient_light(0.3f, 0.3f, 0.3f);
-static Eigen::Vector3f g_brightness(0.0f, 0.0f, 0.0f);
-static Eigen::Vector3f g_light_direction(0.0f, 1.0f, 1.0f);
+enum UniformTypes
+{
+    Vector3f,
+};
+std::map<std::string, UniformTypes> uniform_types_lookup;
+std::map<std::string, nonstd::any> g_uniforms = {
+    {"ambient_light", Eigen::Vector3f(0.5f, 0.5f, 0.5f)},
+    {"brightness", Eigen::Vector3f(0.0f, 0.0f, 0.0f)},
+    {"light_direction", Eigen::Vector3f(0.0f, 1.0f, 1.0f)}
+};
 
 
 void pyegl_load_shader(std::vector<std::string> defines)
 {
+    std::cout << "Defines:";
+    for (const auto& define : defines)
+    {
+        std::cout << " " << define;
+    }
+    std::cout << std::endl;
+
     path so_path(so_path_lookup());
     if(!shaderProgram.Init((so_path.parent_path() / "shaders/basic.vs").str(),
                            (so_path.parent_path() / "shaders/basic.gs").str(), 
@@ -82,9 +99,20 @@ void pyegl_load_shader(std::vector<std::string> defines)
     std::cout << "Attach transformations" << std::endl;
     std::cout << " " << "Uniform locations" << std::endl;
     shaderProgram.Use();
-    shaderProgram.SetUniform3fv("ambient_light", g_ambient_light);
-    shaderProgram.SetUniform3fv("brightness", g_brightness);
-    shaderProgram.SetUniform3fv("light_direction", g_light_direction);
+
+    for (const auto& el : g_uniforms)
+    {
+        switch (uniform_types_lookup[el.first])
+        {
+            case UniformTypes::Vector3f:
+                shaderProgram.SetUniform3fv(el.first, nonstd::any_cast<Eigen::Vector3f>(el.second));
+                break;
+            default:
+                std::cout << "ERROR: not supported uniform parameter" << std::endl;
+                break;
+        }
+    }
+
     transformations.SetUniformLocations(shaderProgram.GetUniformLocation("projection"), shaderProgram.GetUniformLocation("modelview"), shaderProgram.GetUniformLocation("mesh_normalization") );
   
     std::cout << " " << "Attribute locations" << std::endl;
@@ -143,6 +171,8 @@ void pyegl_attach_texture(std::string filename)
 
 void pyegl_load_config(std::string filename)
 {
+    shaderProgram.Use();
+
     std::cout << "Load config" << std::endl;
 
     std::ifstream file(filename);
@@ -156,32 +186,30 @@ void pyegl_load_config(std::string filename)
     nlohmann::json config;
     file >> config;
 
-    try
+    for (auto& el : config.items())
     {
-        std::vector<float> v_ambient_light = config.at("ambient_light").get<std::vector<float>>();
-        g_ambient_light(0) = v_ambient_light[0];
-        g_ambient_light(1) = v_ambient_light[1];
-        g_ambient_light(2) = v_ambient_light[2];
-
-        std::vector<float> v_brightness = config.at("brightness").get<std::vector<float>>();
-        g_brightness(0) = v_brightness[0];
-        g_brightness(1) = v_brightness[1];
-        g_brightness(2) = v_brightness[2];
-
-        std::vector<float> v_light_direction = config.at("light_direction").get<std::vector<float>>();
-        g_light_direction(0) = v_light_direction[0];
-        g_light_direction(1) = v_light_direction[1];
-        g_light_direction(2) = v_light_direction[2];
+        try
+        {
+            switch (uniform_types_lookup.at(el.key()))
+            {
+                case UniformTypes::Vector3f:
+                {
+                    std::vector<float> data = config.at(el.key()).get<std::vector<float>>();
+                    auto uniform = nonstd::any(Eigen::Vector3f(data.data()));
+                    g_uniforms[el.key()].swap(uniform);
+                    shaderProgram.SetUniform3fv(el.key(), nonstd::any_cast<Eigen::Vector3f>(g_uniforms[el.key()]));
+                }
+                    break;
+                default:
+                    std::cout << "ERROR: not supported uniform parameter" << std::endl;
+                    break;
+            }
+        }
+        catch (std::out_of_range& e)
+        {
+            std::cout << "ERROR: wrong parameter in shader config " << e.what() << std::endl;
+        }
     }
-    catch (std::out_of_range& e)
-    {
-        std::cout << "ERROR: wrong parameter in shader config " << e.what() << std::endl;
-    }
-
-    shaderProgram.Use();
-    shaderProgram.SetUniform3fv("ambient_light", g_ambient_light);
-    shaderProgram.SetUniform3fv("brightness", g_brightness);
-    shaderProgram.SetUniform3fv("light_direction", g_light_direction);
 }
 
 
@@ -214,6 +242,8 @@ void render(std::vector<float>& intrinsics)
     glDepthRangef(near, far);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
   
     // set shader program
     shaderProgram.Use();
