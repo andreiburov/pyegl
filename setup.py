@@ -7,7 +7,7 @@ setup(
     version='0.2',
     author='Andrei Burov',
     ext_modules=[
-        CUDAExtension('pyegl', [osp.join('pyegl', 'pyegl.cpp'), osp.join('pyegl', 'deps', 'FreeImageHelper.cpp')],
+        CUDAExtension('pyegl', [osp.join('pyegl', 'pyegl.cpp'), osp.join('pyegl', 'opengl_helper.cpp'), osp.join('pyegl', 'deps', 'FreeImageHelper.cpp')],
                       include_dirs=[osp.join(osp.dirname(osp.realpath(__file__)), 'deps'), osp.join(osp.dirname(osp.realpath(__file__)), 'deps/glew-2.1.0/include')],
                       library_dirs=[osp.join(osp.dirname(osp.realpath(__file__)), 'deps/glew-2.1.0/lib')],
                       libraries=['dl', 'freeimage', 'GL', 'EGL', 'GLESv2', 'GLEW'])

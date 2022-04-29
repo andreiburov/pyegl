@@ -1,5 +1,4 @@
 #include <torch/extension.h>
-
 #include <vector>
 #include <map>
 #include <cassert>
@@ -10,6 +9,7 @@
 #include <string>
 #include <chrono>
 
+
 #include "opengl_helper.h"
 #include "deps/path.h"
 #include "deps/json.h"
@@ -19,6 +19,7 @@
 //#define DEBUG
 #define CLOCK_START(start) auto start = std::chrono::system_clock::now()
 #define CLOCK_END(start, msg) std::cout << msg << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count() << "ms" << std::endl
+
 
 #ifndef DEBUG
 #undef CLOCK_START
@@ -54,27 +55,39 @@ static OpenGL::EGL eglContext;
 static OpenGL::RenderTarget renderTarget;
 static OpenGL::ShaderProgram shaderProgram;
 static OpenGL::Texture texture;
-//static OpenGL::Mesh mesh;
 static std::vector<OpenGL::Mesh> meshes;
 static std::map<long, int> meshes_cache;
 static int g_active_mesh_index = -1;
 static size_t CACHE_SIZE = 20;
 static GLint position_loc, normal_loc, color_loc, uv_loc, mask_loc;
-static OpenGL::Transformations transformations;
-static std::vector<OpenGL::mat4> rigids;
+static OpenGL::Transformation transformation;
+static std::vector<OpenGL::mat4> g_rigids;
 static unsigned int g_frame_count = 0;
 static unsigned int g_width = 512;
 static unsigned int g_height = 512;
-enum UniformTypes
+
+enum UniformType
 {
     Vector3f,
 };
-std::map<std::string, UniformTypes> uniform_types_lookup;
-std::map<std::string, nonstd::any> g_uniforms = {
+
+static std::map<std::string, UniformType> uniform_types_lookup;
+static std::map<std::string, nonstd::any> g_uniforms = {
     {"ambient_light", Eigen::Vector3f(0.5f, 0.5f, 0.5f)},
     {"brightness", Eigen::Vector3f(0.0f, 0.0f, 0.0f)},
     {"light_direction", Eigen::Vector3f(0.0f, 1.0f, 1.0f)}
 };
+
+enum ProjectionType
+{
+    PERSPECTIVE,
+    WEAK_PERSPECTIVE,
+    PINHOLE,
+    PINHOLE_ZERO_OPTICAL_CENTER,
+    IDENTITY,
+};
+
+static ProjectionType g_projection_type = ProjectionType::PINHOLE_ZERO_OPTICAL_CENTER;
 
 
 void pyegl_load_shader(std::vector<std::string> defines)
@@ -83,6 +96,27 @@ void pyegl_load_shader(std::vector<std::string> defines)
     for (const auto& define : defines)
     {
         std::cout << " " << define;
+        
+        if (define == "PERSPECTIVE")
+        {
+            g_projection_type = ProjectionType::PERSPECTIVE;
+        }
+        else if (define == "WEAK_PERSPECTIVE")
+        {
+            g_projection_type = ProjectionType::WEAK_PERSPECTIVE;
+        }
+        else if (define == "PINHOLE")
+        {
+            g_projection_type = ProjectionType::PINHOLE;
+        }
+        else if (define == "PINHOLE_ZERO_OPTICAL_CENTER")
+        {
+            g_projection_type = ProjectionType::PINHOLE_ZERO_OPTICAL_CENTER;
+        }
+        else if (define == "IDENTITY")
+        {
+            g_projection_type = ProjectionType::IDENTITY;
+        }
     }
     std::cout << std::endl;
 
@@ -96,15 +130,15 @@ void pyegl_load_shader(std::vector<std::string> defines)
         return;
     }
   
-    std::cout << "Attach transformations" << std::endl;
-    std::cout << " " << "Uniform locations" << std::endl;
+    std::cout << "Setting uniforms:" << std::endl;
     shaderProgram.Use();
 
     for (const auto& el : g_uniforms)
     {
         switch (uniform_types_lookup[el.first])
         {
-            case UniformTypes::Vector3f:
+            case UniformType::Vector3f:
+                std::cout << el.first << ": " << nonstd::any_cast<Eigen::Vector3f>(el.second) << std::endl;
                 shaderProgram.SetUniform3fv(el.first, nonstd::any_cast<Eigen::Vector3f>(el.second));
                 break;
             default:
@@ -113,7 +147,7 @@ void pyegl_load_shader(std::vector<std::string> defines)
         }
     }
 
-    transformations.SetUniformLocations(shaderProgram.GetUniformLocation("projection"), shaderProgram.GetUniformLocation("modelview"), shaderProgram.GetUniformLocation("mesh_normalization") );
+    transformation.SetUniformLocations(shaderProgram.GetUniformLocation("projection"), shaderProgram.GetUniformLocation("modelview"), shaderProgram.GetUniformLocation("mesh_normalization") );
   
     std::cout << " " << "Attribute locations" << std::endl;
     shaderProgram.Use();
@@ -192,7 +226,7 @@ void pyegl_load_config(std::string filename)
         {
             switch (uniform_types_lookup.at(el.key()))
             {
-                case UniformTypes::Vector3f:
+                case UniformType::Vector3f:
                 {
                     std::vector<float> data = config.at(el.key()).get<std::vector<float>>();
                     auto uniform = nonstd::any(Eigen::Vector3f(data.data()));
@@ -215,14 +249,14 @@ void pyegl_load_config(std::string filename)
 
 void render(std::vector<float>& intrinsics)
 {
-    float fovX, fovY, cX, cY, near, far;
+    float fx, fy, cx, cy, near, far;
   
     if (intrinsics.size() == 6)
     {
-        fovX = intrinsics[0];
-        fovY = intrinsics[1];
-        cX = intrinsics[2];
-        cY = intrinsics[3];
+        fx = intrinsics[0];
+        fy = intrinsics[1];
+        cx = intrinsics[2];
+        cy = intrinsics[3];
         near = intrinsics[4];
         far = intrinsics[5];
     }
@@ -249,19 +283,38 @@ void render(std::vector<float>& intrinsics)
     shaderProgram.Use();
   
     // set uniforms
-    transformations.SetModelView(rigids[0]);
-    transformations.SetPinholeProjection(fovX, fovY, cX, cY, near, far, g_width, g_height);
+    transformation.SetModelView(g_rigids[0]);
+
+    switch (g_projection_type)
+    {
+        case ProjectionType::PERSPECTIVE:
+            transformation.SetPerspectiveProjection(fx, fy, cx, cy, near, far);
+            break;
+        case ProjectionType::WEAK_PERSPECTIVE:
+            transformation.SetWeakPerspectiveProjection(fx, fy, cx, cy);
+            break;
+        case ProjectionType::PINHOLE:
+            transformation.SetPinholeProjection(fx, fy, cx, cy, near, far, g_width, g_height);
+            break;
+        case ProjectionType::IDENTITY:
+            transformation.SetIdentityProjection();
+            break;
+        case ProjectionType::PINHOLE_ZERO_OPTICAL_CENTER:
+        default:
+            transformation.SetPinholeZeroOpticalCenterProjection(fx, fy, cx, cy, near, far, g_width, g_height);
+            break;
+    }
   
     //#ifdef DEBUG
-    //std::cout << "Pinhole camera:" << std::endl;
-    //std::cout << " " << transformations.projection.m00 << " " << transformations.projection.m01 << " " << transformations.projection.m02 << " " << transformations.projection.m03 << std::endl;
-    //std::cout << " " << transformations.projection.m10 << " " << transformations.projection.m11 << " " << transformations.projection.m12 << " " << transformations.projection.m13 << std::endl;
-    //std::cout << " " << transformations.projection.m20 << " " << transformations.projection.m21 << " " << transformations.projection.m22 << " " << transformations.projection.m23 << std::endl;
-    //std::cout << " " << transformations.projection.m30 << " " << transformations.projection.m31 << " " << transformations.projection.m32 << " " << transformations.projection.m33 << std::endl;
+    //std::cout << "Projection matrix:" << std::endl;
+    //std::cout << " " << transformation.projection.m00 << " " << transformation.projection.m01 << " " << transformation.projection.m02 << " " << transformation.projection.m03 << std::endl;
+    //std::cout << " " << transformation.projection.m10 << " " << transformation.projection.m11 << " " << transformation.projection.m12 << " " << transformation.projection.m13 << std::endl;
+    //std::cout << " " << transformation.projection.m20 << " " << transformation.projection.m21 << " " << transformation.projection.m22 << " " << transformation.projection.m23 << std::endl;
+    //std::cout << " " << transformation.projection.m30 << " " << transformation.projection.m31 << " " << transformation.projection.m32 << " " << transformation.projection.m33 << std::endl;
     //#endif
   
     auto& mesh = meshes[g_active_mesh_index];
-    transformations.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
+    transformation.SetMeshNormalization(mesh.GetCoG(), mesh.GetExtend());
   
     #ifdef DEBUG
     std::cout << "Mesh normalization:" << std::endl;
@@ -270,7 +323,7 @@ void render(std::vector<float>& intrinsics)
     std::cout << " " << mesh.GetExtend() << std::endl;
     #endif
   
-    transformations.Use();
+    transformation.Use();
     texture.Use();
   
     // render mesh
@@ -413,7 +466,7 @@ std::vector<torch::Tensor> pyegl_forward(std::vector<float> intrinsics, std::vec
     Eigen::Matrix4f mEigen = m.ToEigen();
     mEigen = mEigen.inverse().eval();
     m.FromEigen(mEigen);
-    rigids.push_back(m);
+    g_rigids.push_back(m);
   
     render(intrinsics);
   
