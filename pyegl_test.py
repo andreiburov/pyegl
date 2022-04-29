@@ -19,7 +19,7 @@ faces = torch.tensor(mesh.faces, dtype=torch.int64)
 
 
 fx, fy, cx, cy, near, far = 1000, 1000, 256, 256, 0.01, 100.0
-intrinsics = [fx, fy, cx, cy, near, far]
+intrinsics = [fx, fy, cx, cy, near, far] # + [0]
 pose = [1., 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 3, 0, 0, 0, 1]
 width, height = 512, 512
 
@@ -41,7 +41,7 @@ positions = maps[1].flip([0]).cpu().numpy()[..., 0:3]
 imageio.imwrite('results/positions.png', positions)
 
 normals = maps[2].flip([0]).cpu().numpy()[..., 0:3]
-imageio.imwrite('results/normals.png', normals)
+imageio.imwrite('results/normals.png', normals * 0.5 + 0.5)
 
 uv = maps[3].flip([0]).cpu()
 uv = torch.where(uv == -1, torch.zeros_like(uv), uv)

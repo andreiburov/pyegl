@@ -251,7 +251,7 @@ void render(std::vector<float>& intrinsics)
 {
     float fx, fy, cx, cy, near, far;
   
-    if (intrinsics.size() == 6)
+    if (intrinsics.size() >= 6)
     {
         fx = intrinsics[0];
         fy = intrinsics[1];
@@ -265,19 +265,24 @@ void render(std::vector<float>& intrinsics)
         std::cout << "ERROR: intrinsics have less then 6 components" << std::endl;
         return;
     }
-  
+
     // reset viewport, clear
     eglContext.Clear();
-  
+    
     renderTarget.Use();
-    renderTarget.Clear();
-  
-    // enable depth test
-    glDepthRangef(near, far);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
+
+    if (intrinsics.size() == 7)
+    {
+        //std::cout << "WARNING: hacky solution to render backfaces" << std::endl;
+        renderTarget.ClearBack();
+    }
+    else
+    {
+        renderTarget.Clear();
+    }    
+
+    // TODO: decide if that's necessary
+    // glDepthRangef(near, far);
   
     // set shader program
     shaderProgram.Use();

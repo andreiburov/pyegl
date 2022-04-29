@@ -204,32 +204,13 @@ class RenderTarget
 public:
     int Init(unsigned int _width, unsigned int _height);
 
-    void Terminate()
-    {
-        for (int i = 0; i < NUM_GRAPHICS_RESOURCES; i++)
-        {
-            cudaGraphicsUnregisterResource(graphics_resource[i]);
-            cudaFree(buffer[i]);
-        }
-    }
+    void Terminate();
 
+    void Use();
 
-    void Use()
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glViewport(0, 0, width, height); 
-    }
+    void Clear();
 
-    void Clear()
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glClearColor(-1.0f, -1.0f, -1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
-    }
+    void ClearBack();
 
     void CopyRenderedTexturesToCUDA(bool copy_to_host=false);
 

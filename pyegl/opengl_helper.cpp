@@ -505,6 +505,46 @@ void RenderTarget::WriteToFile(const std::string& filename, unsigned int tex_id,
     #endif
 }
 
+void RenderTarget::Terminate()
+{
+    for (int i = 0; i < NUM_GRAPHICS_RESOURCES; i++)
+    {
+        cudaGraphicsUnregisterResource(graphics_resource[i]);
+        cudaFree(buffer[i]);
+    }
+}
+
+
+void RenderTarget::Use()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, width, height); 
+}
+
+void RenderTarget::Clear()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glClearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+    glClearDepth(1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+}
+
+void RenderTarget::ClearBack()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glClearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+    glClearDepth(0.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_GREATER);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+}
+
 // Shader
 
 int Shader::LoadShader(const char  *shader_source, GLenum type)

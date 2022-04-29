@@ -42,7 +42,6 @@ void  main()
     #endif
 
     vec3 n = fragData.normal.xyz;
-    if (n.z < 0.0) n *= -1.0;
 
     #ifdef CONSTANT_SHADING
     frag_color += vec4(base_color * ambient_light, 0.0);

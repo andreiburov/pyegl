@@ -47,15 +47,15 @@ void main()
     int i;
     for (i = 0; i < gl_in.length(); i++)
     {      
-      fragData.position = inData[i].position;
-      #ifdef PER_FACE_NORMAL
-      fragData.normal   = normal; // per face normal
-      #else
-      fragData.normal   = inData[i].normal;
-      #endif
-      fragData.color    = inData[i].color;
-      fragData.uv       = inData[i].uv;
-      fragData.mask     = inData[i].mask;
+      fragData.position  = inData[i].position;
+#ifdef PER_FACE_NORMAL
+      fragData.normal    = normal;
+#else
+      fragData.normal    = inData[i].normal;
+#endif
+      fragData.color     = inData[i].color;
+      fragData.uv        = inData[i].uv;
+      fragData.mask      = inData[i].mask;
       fragData.baryCoord = bary[i];
       fragData.vertexIds = vertexIds;
       gl_Position = gl_in[i].gl_Position;
