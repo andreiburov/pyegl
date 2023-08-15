@@ -7,7 +7,7 @@ Module to create renderings of meshes stored within PyTorch tensors on GPU.
 1. First install required dependencies
 - OpenGL/EGL
 - CUDA
-- Eigen
+- Eigen (in `deps` folder as `eigen`)
 - FreeImage
 - Pytorch
 - trimesh (optional)
